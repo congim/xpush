@@ -1,0 +1,17 @@
+module github.com/congim/xpush
+
+go 1.12
+
+require (
+	github.com/gorilla/websocket v1.4.1
+	github.com/hashicorp/memberlist v0.1.5
+	github.com/imdevlab/g v0.0.0-20190827015741-9d786fd876be
+	github.com/kelindar/tcp v1.0.0
+	github.com/labstack/echo v3.3.10+incompatible // indirect
+	github.com/labstack/gommon v0.3.0 // indirect
+	go.uber.org/atomic v1.4.0 // indirect
+	go.uber.org/multierr v1.2.0 // indirect
+	go.uber.org/zap v1.10.0
+	golang.org/x/crypto v0.0.0-20190927123631-a832865fa7ad // indirect
+	gopkg.in/yaml.v2 v2.2.2
+)

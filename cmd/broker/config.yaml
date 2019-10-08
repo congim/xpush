@@ -1,0 +1,22 @@
+common:
+  version: 0.0.1
+  loglevel: debug
+
+listener:
+  listenaddr: "127.0.0.1:9092"
+  readtimeout: 120
+  istls: false
+  certificate: "../../deploy/priv/cert.pem"
+  privatekey: "../../deploy/priv/key.pem"
+
+cluster:
+  name: "127.0.0.1:9092"
+  bindaddr: "127.0.0.1"
+  bindport: 8082
+  seeds:
+    - "127.0.0.1:8081"
+    - "127.0.0.1:8082"
+    - "127.0.0.1:8083"
+
+limit:
+  messagesize: 1024
