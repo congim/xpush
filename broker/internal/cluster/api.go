@@ -15,6 +15,6 @@ type Cluster interface {
 }
 
 func New(conf *config.Cluster, logger *zap.Logger, notify func(*Event) error) Cluster {
-	cluster := newCluster(conf, logger, notify)
-	return cluster
+	swarm := swarm(conf, logger, notify)
+	return swarm
 }

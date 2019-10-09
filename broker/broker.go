@@ -64,16 +64,17 @@ func (b *Broker) Start() error {
 		return err
 	}
 
-	errChan := make(chan error, 1)
-	go b.listen(errChan)
-	go func() {
-		select {
-		case err, ok := <-errChan:
-			if ok {
-				b.logger.Error("start", zap.Error(err))
-			}
-		}
-	}()
+	//errChan := make(chan error, 1)
+	//go b.listen(errChan)
+	//
+	//go func() {
+	//	select {
+	//	case err, ok := <-errChan:
+	//		if ok {
+	//			b.logger.Fatal("start", zap.Error(err))
+	//		}
+	//	}
+	//}()
 	return nil
 }
 

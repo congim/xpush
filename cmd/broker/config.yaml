@@ -3,16 +3,19 @@ common:
   loglevel: debug
 
 listener:
-  listenaddr: "127.0.0.1:9092"
+  # 客户端链接地址
+  listenaddr: "127.0.0.1:9091"
   readtimeout: 120
   istls: false
   certificate: "../../deploy/priv/cert.pem"
   privatekey: "../../deploy/priv/key.pem"
 
 cluster:
-  name: "127.0.0.1:9092"
+  # 节点之间通讯地址
+  name: "127.0.0.1:7073"
+  # gossip监听地址
   bindaddr: "127.0.0.1"
-  bindport: 8082
+  bindport: 8083
   seeds:
     - "127.0.0.1:8081"
     - "127.0.0.1:8082"
