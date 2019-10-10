@@ -1,5 +1,11 @@
 package broker
 
+import "sync"
+
+type Topics struct {
+	conns sync.Map
+}
+
 //
 //var _ Topicer = (*topicer)(nil)
 //

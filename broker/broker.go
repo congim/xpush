@@ -46,7 +46,7 @@ func New(conf *config.Config, logger *zap.Logger) *Broker {
 	mux.HandleFunc("/", gBroker.onRequest)
 	gBroker.http.Handler = mux
 	gBroker.tcp.OnAccept = func(conn net.Conn) {
-		c := newConn(conn, gBroker)
+		c := newConn(conn, gBroker, gBroker.conf.Listener.ReadTimeOut)
 		go c.Process()
 	}
 
@@ -64,17 +64,17 @@ func (b *Broker) Start() error {
 		return err
 	}
 
-	//errChan := make(chan error, 1)
-	//go b.listen(errChan)
-	//
-	//go func() {
-	//	select {
-	//	case err, ok := <-errChan:
-	//		if ok {
-	//			b.logger.Fatal("start", zap.Error(err))
-	//		}
-	//	}
-	//}()
+	errChan := make(chan error, 1)
+	go b.listen(errChan)
+
+	go func() {
+		select {
+		case err, ok := <-errChan:
+			if ok {
+				b.logger.Fatal("start", zap.Error(err))
+			}
+		}
+	}()
 	return nil
 }
 
@@ -103,7 +103,7 @@ func (b *Broker) Close() {
 
 func (b *Broker) onRequest(w http.ResponseWriter, r *http.Request) {
 	if conn, ok := websocket.TryUpgrade(w, r); ok {
-		c := newConn(conn, b)
+		c := newConn(conn, b, gBroker.conf.Listener.ReadTimeOut)
 		go c.Process()
 	}
 }

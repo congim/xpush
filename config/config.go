@@ -35,7 +35,7 @@ type Broker struct {
 }
 
 type Listener struct {
-	ReadTimeOut int
+	ReadTimeOut uint16
 	ListenAddr  string
 	IsTLS       bool
 	Certificate string
