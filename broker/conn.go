@@ -4,9 +4,11 @@ import (
 	"bufio"
 	"log"
 	"net"
+	"sync"
 	"time"
 
 	"github.com/congim/xpush/pkg/network/mqtt"
+	"go.uber.org/zap"
 )
 
 type Conn struct {
@@ -16,6 +18,7 @@ type Conn struct {
 	password  string
 	keepalive uint16
 	clientID  string
+	topics    sync.Map
 }
 
 func newConn(conn net.Conn, broker *Broker, readTout uint16) *Conn {
@@ -99,11 +102,11 @@ func (c *Conn) onReceive(msg mqtt.Message) error {
 		// @TODO 订阅处理
 		// Subscribe for each subscription
 		for _, sub := range packet.Subscriptions {
-			//if err := c.onSubscribe(sub.Topic); err != nil {
-			//	ack.Qos = append(ack.Qos, 0x80) // 0x80 indicate subscription failure
-			//	c.notifyError(err, packet.MessageID)
-			//	continue
-			//}
+			if err := c.onSubscribe(string(sub.Topic)); err != nil {
+				ack.Qos = append(ack.Qos, 0x80) // 0x80 indicate subscription failure
+				//c.notifyError(err, packet.MessageID)
+				continue
+			}
 
 			// Append the QoS
 			ack.Qos = append(ack.Qos, sub.Qos)
@@ -162,7 +165,6 @@ func (c *Conn) onReceive(msg mqtt.Message) error {
 
 // onConnect handles the connection authorization
 func (c *Conn) onConnect(packet *mqtt.Connect) bool {
-
 	// @TODO 账号密码校验
 	c.username = string(packet.Username)
 	c.password = string(packet.Password)
@@ -170,5 +172,28 @@ func (c *Conn) onConnect(packet *mqtt.Connect) bool {
 	if c.keepalive < packet.KeepAlive {
 		c.keepalive = packet.KeepAlive
 	}
+	// @TODO 数据库中存储用户登陆信息
 	return true
+}
+
+func (c *Conn) onSubscribe(topic string) error {
+	topicType, err := topicType(topic)
+	if err != nil {
+		logger.Warn("topicType failed", zap.String("topic", topic), zap.String("username", c.username))
+		return err
+	}
+
+	c.subscribe(&TopicInfo{
+		Type:  topicType,
+		Topic: topic,
+	})
+
+	//gBroker.topics.Store(topic, )
+	// @TODO 数据库中存储订阅主题信息
+
+	return nil
+}
+
+func (c *Conn) subscribe(topicInfo *TopicInfo) {
+	c.topics.Store(topicInfo.Topic, topicInfo)
 }

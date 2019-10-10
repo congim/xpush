@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"net"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/congim/xpush/broker/internal/cluster"
@@ -14,6 +15,8 @@ import (
 	"go.uber.org/zap"
 )
 
+var logger *zap.Logger
+
 type Broker struct {
 	cluster  cluster.Cluster
 	conf     *config.Config
@@ -21,6 +24,11 @@ type Broker struct {
 	tcp      *tcp.Server
 	logger   *zap.Logger
 	listener *listener.Listener
+	topics   sync.Map
+
+	//groupTopic   sync.Map
+	//privateTopic sync.Map
+
 	// protocol
 	// storage
 	// verify
@@ -30,13 +38,15 @@ type Broker struct {
 var gBroker *Broker
 
 // New return broker struct
-func New(conf *config.Config, logger *zap.Logger) *Broker {
+func New(conf *config.Config, l *zap.Logger) *Broker {
 	gBroker = &Broker{
 		conf:   conf,
 		http:   new(http.Server),
 		tcp:    new(tcp.Server),
-		logger: logger,
+		logger: l,
 	}
+
+	logger = l
 
 	if gBroker.conf.Cluster != nil {
 		gBroker.cluster = cluster.New(gBroker.conf.Cluster, gBroker.logger, notify)

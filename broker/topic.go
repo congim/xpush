@@ -1,9 +1,45 @@
 package broker
 
-import "sync"
+import (
+	"fmt"
+	"strings"
+	"sync"
+)
 
-type Topics struct {
-	conns sync.Map
+type TopicType string
+
+const (
+	GroupType      TopicType = "g"
+	PrivateType    TopicType = "p"
+	TopicSeparator string    = "/"
+)
+
+// Topic topic订阅情况，用来映射conns
+type Topic struct {
+	Type  TopicType
+	Conns sync.Map
+}
+
+// topic的详细信息，用来在conn映射topic
+type TopicInfo struct {
+	Type  TopicType
+	Topic string
+}
+
+func topicType(topic string) (TopicType, error) {
+	parts := strings.Split(topic, TopicSeparator)
+	if len(parts) != 3 {
+		return "", fmt.Errorf("illegal topic, topic is %s", topic)
+	}
+
+	switch TopicType(parts[1]) {
+	case GroupType:
+		return GroupType, nil
+	case PrivateType:
+		return PrivateType, nil
+	default:
+		return "", fmt.Errorf("illegal topic type, type is %s, topic is %s", parts[1], topic)
+	}
 }
 
 //
@@ -16,7 +52,7 @@ type Topics struct {
 //}
 //
 //type topicer struct {
-//	cons sync.Map
+//	conns sync.Map
 //}
 //
 //func (t *topicer) Subscribe(string) error {
