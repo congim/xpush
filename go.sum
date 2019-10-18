@@ -1,5 +1,9 @@
 cloud.google.com/go v0.26.0/go.mod h1:aQUYkXzVsufM+DwF1aE+0xfcU+56JwCaLick0ClmMTw=
 github.com/BurntSushi/toml v0.3.1/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03qcyfWMU=
+github.com/apple/foundationdb v0.0.0-20190724023245-90ba203c166c h1:IrJff3SotIzFxVLPCwcHbqiw7eX+o8KNOdEPU7cCgdA=
+github.com/apple/foundationdb v0.0.0-20190724023245-90ba203c166c/go.mod h1:r68WTUyFp2yVpUaqVBncjC7C62Cuom4IiEuRCVEKRbw=
+github.com/apple/foundationdb/bindings/go v0.0.0-20190724023245-90ba203c166c h1:+NyJPOJEmyYbbN8YyfGWk2XJMMLyrBJI8UY5s8dWMPI=
+github.com/apple/foundationdb/bindings/go v0.0.0-20190724023245-90ba203c166c/go.mod h1:OMVSB21p9+xQUIqlGizHPZfjK+SHws1ht+ZytVDoz9U=
 github.com/armon/go-metrics v0.0.0-20180917152333-f0300d1749da h1:8GUt8eRujhVEGZFFEjBj46YV4rDjvGrNxb0KMWYkL2I=
 github.com/armon/go-metrics v0.0.0-20180917152333-f0300d1749da/go.mod h1:Q73ZrmVTwzkszR9V5SSuryQ31EELlFMUz1kKyl939pY=
 github.com/client9/misspell v0.3.4/go.mod h1:qj6jICC3Q7zFZvVWo7KLAzC3yx5G7kyvSDkc90ppPyw=
@@ -30,8 +34,6 @@ github.com/hashicorp/golang-lru v0.5.0 h1:CL2msUPvZTLb5O648aiLNJw3hnBxN2+1Jq8rCO
 github.com/hashicorp/golang-lru v0.5.0/go.mod h1:/m3WP610KZHVQ1SGc6re/UDhFvYD7pJ4Ao+sR/qLZy8=
 github.com/hashicorp/memberlist v0.1.5 h1:AYBsgJOW9gab/toO5tEB8lWetVgDKZycqkebJ8xxpqM=
 github.com/hashicorp/memberlist v0.1.5/go.mod h1:ajVTdAv/9Im8oMAAj5G31PhhMCZJV2pPBoIllUwCN7I=
-github.com/imdevlab/g v0.0.0-20190827015741-9d786fd876be h1:/4oXdtFldq7j8aeB9DvYGXirOfmdZ40hZtjnltyVOAg=
-github.com/imdevlab/g v0.0.0-20190827015741-9d786fd876be/go.mod h1:Win9waLdq+QuZFjxwRqiApXhOeJ1pu+nQsFiQ1+wrn4=
 github.com/kelindar/tcp v1.0.0 h1:585JE7qmc6S5EQPYLAkRqfGo4PqDxalke98AXjxPmrE=
 github.com/kelindar/tcp v1.0.0/go.mod h1:JB5hj1cshLU60XrLij2BBxW3JQ4hOye8vqbyvuKb52k=
 github.com/labstack/echo v3.3.10+incompatible h1:pGRcYk231ExFAyoAjAfD85kQzRJCRI8bbnE7CX5OEgg=

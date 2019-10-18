@@ -3,10 +3,11 @@ module github.com/congim/xpush
 go 1.12
 
 require (
+	github.com/apple/foundationdb v0.0.0-20190724023245-90ba203c166c
+	github.com/apple/foundationdb/bindings/go v0.0.0-20190724023245-90ba203c166c
 	github.com/golang/protobuf v1.3.2
 	github.com/gorilla/websocket v1.4.1
 	github.com/hashicorp/memberlist v0.1.5
-	github.com/imdevlab/g v0.0.0-20190827015741-9d786fd876be
 	github.com/kelindar/tcp v1.0.0
 	github.com/labstack/echo v3.3.10+incompatible // indirect
 	github.com/labstack/gommon v0.3.0 // indirect

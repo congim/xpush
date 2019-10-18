@@ -13,6 +13,8 @@ type Config struct {
 	Listener *Listener
 	Limit    *LimitConfig
 	Cluster  *Cluster
+	Storage  *Storage
+	Cache    *Cache
 }
 
 type Cluster struct {
@@ -42,8 +44,15 @@ type Listener struct {
 	PrivateKey  string
 }
 
-// Conf ...
-//var Conf *Config
+type Storage struct {
+	Name    string
+	Threads int
+	DBSpace string
+}
+
+type Cache struct {
+	Name string
+}
 
 // New config struct
 func New(path string) (*Config, error) {

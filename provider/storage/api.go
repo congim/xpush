@@ -1,14 +1,22 @@
 package storage
 
-import "github.com/congim/xpush/provider/storage/cassandra"
+import (
+	"github.com/congim/xpush/config"
+	"github.com/congim/xpush/pkg/message"
+	"github.com/congim/xpush/provider/storage/foundationdb"
+	"go.uber.org/zap"
+)
 
 type Storage interface {
-	Store() error
+	Init() error
+	Store(*message.Message) error
 }
 
-func New(storageName string) Storage {
-	if storageName == "cassandra" {
-		return cassandra.New()
+func New(conf *config.Storage, logger *zap.Logger) Storage {
+	if conf.Name == "cassandra" {
+
+	} else if conf.Name == "fdb" {
+		return foundationdb.New(conf, logger)
 	}
-	return newNoopStorage()
+	return newNoopStorage(conf, logger)
 }

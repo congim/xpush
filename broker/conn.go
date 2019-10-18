@@ -2,11 +2,12 @@ package broker
 
 import (
 	"bufio"
-	"log"
+	"fmt"
 	"net"
 	"sync"
 	"time"
 
+	"github.com/congim/xpush/pkg/message"
 	"github.com/congim/xpush/pkg/network/mqtt"
 	"go.uber.org/zap"
 )
@@ -18,7 +19,21 @@ type Conn struct {
 	password  string
 	keepalive uint16
 	clientID  string
-	topics    sync.Map
+	cid       uint64
+	msgID     uint16
+	msgIDLock sync.Mutex
+	//topics    sync.Map
+}
+
+func (c *Conn) getMsgID() (uint16, error) {
+	c.msgIDLock.Lock()
+	defer c.msgIDLock.Unlock()
+	if c.msgID >= 65535 {
+		//return 0, fmt.Errorf("msgid exception")
+		c.msgID = 0
+	}
+	c.msgID++
+	return c.msgID, nil
 }
 
 func newConn(conn net.Conn, broker *Broker, readTout uint16) *Conn {
@@ -107,7 +122,6 @@ func (c *Conn) onReceive(msg mqtt.Message) error {
 				//c.notifyError(err, packet.MessageID)
 				continue
 			}
-
 			// Append the QoS
 			ack.Qos = append(ack.Qos, sub.Qos)
 		}
@@ -142,58 +156,124 @@ func (c *Conn) onReceive(msg mqtt.Message) error {
 		}
 
 	case mqtt.TypeOfDisconnect:
+		// @TODO 清理缓存等信息
 		return nil
 
 	case mqtt.TypeOfPublish:
 		packet := msg.(*mqtt.Publish)
-		log.Println("push msg", string(packet.Payload))
+		// @TODO 优化错误处理
+		c.onPublish(packet)
+		//log.Println("push msg", string(packet.Payload))
 		//if err := c.onPublish(packet); err != nil {
 		//	logging.LogError("conn", "publish received", err)
 		//	c.notifyError(err, packet.MessageID)
 		//}
+
+		// 消息存储
+		// 集群同步&&推送消息
+		// 计数器
+
 		// Acknowledge the publication
 		if packet.Header.QOS > 0 {
-			ack := mqtt.Puback{MessageID: packet.MessageID}
+			ack := mqtt.Puback{
+				MessageID: packet.MessageID,
+			}
 			if _, err := ack.EncodeTo(c.socket); err != nil {
 				return err
 			}
 		}
 	}
-
 	return nil
 }
 
 // onConnect handles the connection authorization
 func (c *Conn) onConnect(packet *mqtt.Connect) bool {
 	// @TODO 账号密码校验
+
 	c.username = string(packet.Username)
 	c.password = string(packet.Password)
 	c.clientID = string(packet.ClientID)
-	if c.keepalive < packet.KeepAlive {
+	if 0 < packet.KeepAlive && c.keepalive < packet.KeepAlive {
 		c.keepalive = packet.KeepAlive
 	}
-	// @TODO 数据库中存储用户登陆信息
+
+	// 申请cid
+	c.cid = c.broker.uid.Uid()
+
+	// 缓存中存储用户登陆信息
+	if err := c.broker.cache.Login(c.cid, c.broker.conf.Cluster.Name); err != nil {
+		logger.Warn("cache login failed", zap.String("userName", c.username), zap.String("clientID", c.clientID), zap.Uint64("cid", c.cid), zap.Error(err))
+		return false
+	}
 	return true
 }
 
 func (c *Conn) onSubscribe(topic string) error {
-	topicType, err := topicType(topic)
-	if err != nil {
-		logger.Warn("topicType failed", zap.String("topic", topic), zap.String("username", c.username))
-		return err
-	}
-
-	c.subscribe(&TopicInfo{
-		Type:  topicType,
-		Topic: topic,
-	})
-
-	//gBroker.topics.Store(topic, )
 	// @TODO 数据库中存储订阅主题信息
 
+	// @TODO 建立topic和clientID直接映射关系
+	if err := c.broker.subscribe(topic, c.cid, c); err != nil {
+		logger.Warn("subscribe failed", zap.String("userName", c.username), zap.String("clientID", c.clientID), zap.Uint64("cid", c.cid), zap.Error(err))
+		return err
+	}
 	return nil
 }
 
-func (c *Conn) subscribe(topicInfo *TopicInfo) {
-	c.topics.Store(topicInfo.Topic, topicInfo)
+func (c *Conn) onPublish(packet *mqtt.Publish) error {
+	msg := message.New()
+	if err := msg.Decode(packet.Payload); err != nil {
+		logger.Warn("msg decode failed", zap.Error(err))
+		return err
+	}
+	switch msg.Type {
+	case message.MsgPub:
+		if err := c.broker.storage.Store(msg); err != nil {
+			logger.Warn("store msg failed", zap.Error(err))
+			return err
+		}
+
+		// @TODO 检测本机在线用并推送
+		if err := c.broker.pushOnline(string(packet.Topic), c.cid, msg); err != nil {
+			logger.Warn("push online failed", zap.Error(err))
+			//return err
+		}
+
+		// @TODO 计数器更新
+
+		// @TODO 将消息推送到其他集群上
+
+		break
+	case message.MsgPull:
+
+		break
+	default:
+		return fmt.Errorf("unknow msg type, type is %d", msg.Type)
+	}
+
+	// 消息存储
+	// 集群同步&&推送消息
+	// 计数器
+	return nil
+}
+
+// @TODO 改为异步
+func (c *Conn) Publish(topic string, packet *message.Message) error {
+	// @TODO 推送实现
+	payload, err := packet.Encode()
+	if err != nil {
+		logger.Warn("packet encode failed", zap.Uint64("cid", c.cid), zap.String("topic", ""), zap.Error(err))
+		return err
+	}
+
+	msgID, _ := c.getMsgID()
+	msg := mqtt.Publish{
+		Header: &mqtt.StaticHeader{
+			QOS: 0,
+		},
+		Topic:     []byte(topic),
+		MessageID: msgID,
+		Payload:   payload,
+	}
+	_, err = msg.EncodeTo(c.socket)
+	return err
 }

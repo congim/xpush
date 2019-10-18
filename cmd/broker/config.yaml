@@ -23,3 +23,12 @@ cluster:
 
 limit:
   messagesize: 1024
+
+storage:
+  name: "fdb"
+  threads: 10
+  dbspace: "xpush"
+
+
+cache:
+  name: "mem1"
