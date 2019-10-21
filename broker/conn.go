@@ -22,7 +22,7 @@ type Conn struct {
 	cid       uint64
 	msgID     uint16
 	msgIDLock sync.Mutex
-	//topics    sync.Map
+	msgQueue  chan []*message.Message
 }
 
 func (c *Conn) getMsgID() (uint16, error) {
@@ -41,14 +41,46 @@ func newConn(conn net.Conn, broker *Broker, readTout uint16) *Conn {
 		socket:    conn,
 		broker:    broker,
 		keepalive: readTout,
+		msgQueue:  make(chan []*message.Message, 500),
 	}
 }
 
 // Process processes the messages.
 func (c *Conn) Process() {
 	defer func() {
-		_ = c.Close()
+		if err := recover(); err != nil {
+			logger.Warn("process", zap.Any("recover", err))
+		}
 	}()
+	stopC := make(chan struct{}, 1)
+	defer func() {
+		_ = c.Close()
+		close(stopC)
+	}()
+
+	go c.sendLoop(stopC)
+	c.readLoop()
+}
+
+func (c *Conn) sendLoop(stopC <-chan struct{}) {
+	for {
+		select {
+		case <-stopC:
+			return
+		case msgs, ok := <-c.msgQueue:
+			if ok {
+				for _, msg := range msgs {
+					if err := c.publish(msg); err != nil {
+						logger.Warn("pushlish failed", zap.Uint64("cid", c.cid), zap.String("topic", msg.Topic), zap.Error(err))
+					}
+				}
+			}
+			break
+		}
+	}
+}
+
+func (c *Conn) readLoop() {
 	maxSize := c.broker.conf.Limit.MessageSize
 	reader := bufio.NewReaderSize(c.socket, 65536)
 	for {
@@ -162,17 +194,12 @@ func (c *Conn) onReceive(msg mqtt.Message) error {
 	case mqtt.TypeOfPublish:
 		packet := msg.(*mqtt.Publish)
 		// @TODO 优化错误处理
-		c.onPublish(packet)
-		//log.Println("push msg", string(packet.Payload))
-		//if err := c.onPublish(packet); err != nil {
-		//	logging.LogError("conn", "publish received", err)
-		//	c.notifyError(err, packet.MessageID)
-		//}
-
+		if err := c.onPublish(packet); err != nil {
+			logger.Warn("onPublish failed", zap.Uint64("cid", c.cid), zap.String("userName", c.username), zap.Error(err))
+		}
 		// 消息存储
 		// 集群同步&&推送消息
 		// 计数器
-
 		// Acknowledge the publication
 		if packet.Header.QOS > 0 {
 			ack := mqtt.Puback{
@@ -233,7 +260,7 @@ func (c *Conn) onPublish(packet *mqtt.Publish) error {
 		}
 
 		// @TODO 检测本机在线用并推送
-		if err := c.broker.pushOnline(string(packet.Topic), c.cid, msg); err != nil {
+		if err := c.broker.pushOnline(c.cid, msg); err != nil {
 			logger.Warn("push online failed", zap.Error(err))
 			//return err
 		}
@@ -256,12 +283,15 @@ func (c *Conn) onPublish(packet *mqtt.Publish) error {
 	return nil
 }
 
-// @TODO 改为异步
-func (c *Conn) Publish(topic string, packet *message.Message) error {
-	// @TODO 推送实现
+func (c *Conn) Publish(packet *message.Message) error {
+	c.msgQueue <- []*message.Message{packet}
+	return nil
+}
+
+func (c *Conn) publish(packet *message.Message) error {
 	payload, err := packet.Encode()
 	if err != nil {
-		logger.Warn("packet encode failed", zap.Uint64("cid", c.cid), zap.String("topic", ""), zap.Error(err))
+		logger.Warn("packet encode failed", zap.Uint64("cid", c.cid), zap.String("topic", packet.Topic), zap.Error(err))
 		return err
 	}
 
@@ -270,10 +300,11 @@ func (c *Conn) Publish(topic string, packet *message.Message) error {
 		Header: &mqtt.StaticHeader{
 			QOS: 0,
 		},
-		Topic:     []byte(topic),
+		Topic:     []byte(packet.Topic),
 		MessageID: msgID,
 		Payload:   payload,
 	}
+
 	_, err = msg.EncodeTo(c.socket)
 	return err
 }

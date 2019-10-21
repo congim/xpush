@@ -2,6 +2,7 @@ package broker
 
 import (
 	"crypto/tls"
+	"log"
 	"net"
 	"net/http"
 	"sync"
@@ -42,6 +43,18 @@ var gBroker *Broker
 
 // New return broker struct
 func New(conf *config.Config, l *zap.Logger) *Broker {
+
+	// test start
+	msg := message.New()
+	msg.Type = message.MsgPub
+	msg.Version = 1
+	msg.Topic = "test"
+	msg.ID = "123456"
+	msg.Payload = []byte("hello xpush !")
+	b, _ := msg.Encode()
+	log.Println("body", string(b))
+	// test end
+
 	gBroker = &Broker{
 		conf:    conf,
 		http:    new(http.Server),
@@ -170,16 +183,16 @@ func (b *Broker) subscribe(topic string, cid uint64, con *Conn) error {
 	return nil
 }
 
-func (b *Broker) pushOnline(topic string, owner uint64, msg *message.Message) error {
-	conns, ok := b.topics.Load(topic)
+func (b *Broker) pushOnline(owner uint64, msg *message.Message) error {
+	conns, ok := b.topics.Load(msg.Topic)
 	if !ok {
 		return nil
 	}
 
 	conns.(*sync.Map).Range(func(cid, conn interface{}) bool {
 		if cid != owner {
-			if err := conn.(*Conn).Publish(topic, msg); err != nil {
-				logger.Warn("push failed", zap.Uint64("cid", cid.(uint64)), zap.String("topic", topic), zap.Error(err))
+			if err := conn.(*Conn).Publish(msg); err != nil {
+				logger.Warn("push failed", zap.Uint64("cid", cid.(uint64)), zap.String("topic", msg.Topic), zap.Error(err))
 			}
 		}
 		return true
