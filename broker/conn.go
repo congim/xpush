@@ -194,11 +194,15 @@ func (c *Conn) onReceive(msg mqtt.Message) error {
 	case mqtt.TypeOfPublish:
 		packet := msg.(*mqtt.Publish)
 		// @TODO 优化错误处理
-		if err := c.onPublish(packet); err != nil {
+		msg := message.New()
+		if err := msg.Decode(packet.Payload); err != nil {
+			logger.Warn("msg decode failed", zap.Error(err))
+			return err
+		}
+		if err := c.onPublish(packet, msg); err != nil {
 			logger.Warn("onPublish failed", zap.Uint64("cid", c.cid), zap.String("userName", c.username), zap.Error(err))
 		}
-		// 消息存储
-		// 集群同步&&推送消息
+
 		// 计数器
 		// Acknowledge the publication
 		if packet.Header.QOS > 0 {
@@ -246,15 +250,10 @@ func (c *Conn) onSubscribe(topic string) error {
 	return nil
 }
 
-func (c *Conn) onPublish(packet *mqtt.Publish) error {
-	msg := message.New()
-	if err := msg.Decode(packet.Payload); err != nil {
-		logger.Warn("msg decode failed", zap.Error(err))
-		return err
-	}
+func (c *Conn) onPublish(packet *mqtt.Publish, msg *message.Message) error {
 	switch msg.Type {
 	case message.MsgPub:
-		if err := c.broker.storage.Store(msg); err != nil {
+		if err := c.broker.storage.Store([]*message.Message{msg}); err != nil {
 			logger.Warn("store msg failed", zap.Error(err))
 			return err
 		}
