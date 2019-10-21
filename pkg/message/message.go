@@ -4,10 +4,10 @@ import "encoding/json"
 
 type Message struct {
 	Version byte       `msgp:"v" json:"v"`
-	Type    MsgControl `msgp:"t" type:"t"`
-	Topic   string     `msgp:"tp" type:"tp"`
-	ID      string     `msgp:"i" id:"i"`
-	Payload []byte     `msgp:"p" payload:"p"`
+	Type    MsgControl `msgp:"t" json:"t"`
+	Topic   string     `msgp:"tp" json:"tp"`
+	ID      string     `msgp:"i" json:"i"`
+	Payload []byte     `msgp:"p" json:"p"`
 }
 
 func New() *Message {

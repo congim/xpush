@@ -1,47 +1,53 @@
 package cluster
 
 import (
-	"context"
+	"net/rpc"
 
-	"github.com/congim/xpush/broker/internal/proto/peer"
+	"github.com/congim/xpush/pkg/message"
 	"go.uber.org/zap"
-	"google.golang.org/grpc"
 )
 
 type Peer struct {
 	name   string
 	addr   string
 	logger *zap.Logger
-	client peer.PeerClient
-	conn   *grpc.ClientConn
+	client *rpc.Client
 }
 
 func newPeer(addr, name string, logger *zap.Logger) (*Peer, error) {
-	conn, err := grpc.Dial(addr, grpc.WithInsecure())
+	client, err := rpc.Dial("tcp", addr)
 	if err != nil {
-		logger.Error("grp dial failed", zap.Error(err))
+		logger.Warn("rpc dial failed", zap.Error(err))
 		return nil, err
 	}
 
 	p := &Peer{
 		name:   name,
 		addr:   addr,
+		client: client,
 		logger: logger,
-		conn:   conn,
 	}
-	p.client = peer.NewPeerClient(conn)
+
+	//go func() {
+	//	for {
+	//		time.Sleep(1 * time.Second)
+	//		p.OnMessage("world")
+	//	}
+	//}()
+
 	return p, nil
 }
 
 func (p *Peer) Close() error {
-	if p.conn != nil {
-		_ = p.conn.Close()
+	if p.client != nil {
+		_ = p.client.Close()
 	}
 	return nil
 }
 
-func (p *Peer) OnMessage(msg *peer.Message) (*peer.Reply, error) {
-	reply, err := p.client.OnMessage(context.Background(), msg)
+func (p *Peer) OnMessage(msg *message.Message) (*message.Reply, error) {
+	reply := message.NewReply()
+	err := p.client.Call("RPCServer.OnMessage", msg, reply)
 	if err != nil {
 		p.logger.Warn("onmessage is failed", zap.Error(err))
 		return reply, err

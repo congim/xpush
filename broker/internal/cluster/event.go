@@ -67,6 +67,7 @@ func (e *event) NotifyLeave(n *memberlist.Node) {
 		Addr: n.Addr.String(),
 		Port: n.Port,
 	}
+
 	if err := e.s.notify(event); err != nil {
 		e.logger.Warn("notify failed", zap.String("type", "Leave"), zap.Any("event", event))
 	}

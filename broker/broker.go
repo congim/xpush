@@ -197,5 +197,6 @@ func (b *Broker) pushOnline(owner uint64, msg *message.Message) error {
 		}
 		return true
 	})
+
 	return nil
 }

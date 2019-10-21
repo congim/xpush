@@ -9,7 +9,8 @@ import (
 type Cache interface {
 	Init() error
 	Login(uint64, string) error
-	Logout(uint64, string) error
+	Logout(uint64) error
+	Get(uint64) (string, bool)
 }
 
 func New(conf *config.Cache, l *zap.Logger) Cache {

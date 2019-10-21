@@ -268,6 +268,8 @@ func (c *Conn) onPublish(packet *mqtt.Publish) error {
 		// @TODO 计数器更新
 
 		// @TODO 将消息推送到其他集群上
+		_, _ = c.broker.cluster.OnAllMessage(msg)
+		//log.Println(replys)
 
 		break
 	case message.MsgPull:

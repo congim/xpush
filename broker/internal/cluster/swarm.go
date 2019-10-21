@@ -1,11 +1,13 @@
 package cluster
 
 import (
+	"fmt"
 	"io/ioutil"
 	"sync"
 	"time"
 
 	"github.com/congim/xpush/config"
+	"github.com/congim/xpush/pkg/message"
 	"github.com/hashicorp/memberlist"
 	"go.uber.org/zap"
 )
@@ -31,7 +33,7 @@ func swarm(conf *config.Cluster, logger *zap.Logger, notify func(*Event) error) 
 
 func (s *Swarm) Start() error {
 	go func() {
-		if err := initServer(s.conf.Name, s.logger); err != nil {
+		if err := startRPC(s.conf.Name, s.logger); err != nil {
 			s.logger.Fatal("init server failed", zap.Error(err))
 			return
 		}
@@ -90,4 +92,28 @@ func (s *Swarm) Close() error {
 		_ = s.hosts.Leave(time.Second * 5)
 	}
 	return nil
+}
+
+func (s *Swarm) OnMessage(peerName string, msg *message.Message) (*message.Reply, error) {
+	peer, ok := s.peers.Load(peerName)
+	if !ok {
+		s.logger.Warn("unfind peer", zap.String("peerName", peerName))
+		return &message.Reply{}, fmt.Errorf("unfind peerName, peer name is %s", peerName)
+	}
+	reply, err := peer.(*Peer).OnMessage(msg)
+	return reply, err
+}
+
+func (s *Swarm) OnAllMessage(msg *message.Message) ([]*message.Reply, error) {
+	var replys []*message.Reply
+	s.peers.Range(func(peerName, peer interface{}) bool {
+		reply, err := peer.(*Peer).OnMessage(msg)
+		if err != nil {
+			s.logger.Warn("on all message failed", zap.String("peerName", peerName.(string)), zap.String("topic", msg.Topic), zap.Error(err))
+		}
+		replys = append(replys, reply)
+		return true
+	})
+
+	return replys, nil
 }
