@@ -204,3 +204,21 @@ func (b *Broker) pushOnline(owner uint64, msg *message.Message) error {
 
 	return nil
 }
+
+func (b *Broker) pushOnlineWithoutOwner(msg *message.Message) error {
+	conns, ok := b.topics.Load(msg.Topic)
+	if !ok {
+		return nil
+	}
+
+	conns.(*sync.Map).Range(func(cid, conn interface{}) bool {
+		if err := conn.(*Conn).Publish(msg); err != nil {
+			logger.Warn("push failed", zap.Uint64("cid", cid.(uint64)), zap.String("topic", msg.Topic), zap.Error(err))
+		}
+		return true
+	})
+
+	// @TODO 记录msgID to mqttID的映射关系，等待Ack的时候记录已读
+
+	return nil
+}

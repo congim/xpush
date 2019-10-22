@@ -18,6 +18,14 @@ func notify(event *cluster.Event) error {
 	case cluster.Update:
 		gBroker.logger.Debug("Update", zap.String("name", event.Name))
 		break
+	case cluster.Pub:
+		for _, msg := range event.Msgs {
+			if err := gBroker.pushOnlineWithoutOwner(msg); err != nil {
+				logger.Warn("publish msg failed", zap.String("topic", msg.Topic), zap.String("msgID", msg.ID), zap.Error(err))
+				continue
+			}
+		}
+
 	default:
 		return fmt.Errorf("unknow type, type is %d", event.Type)
 	}

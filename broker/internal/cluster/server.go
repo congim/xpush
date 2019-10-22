@@ -10,17 +10,24 @@ import (
 )
 
 type RPCServer struct {
-	name string
+	name   string
+	notify func(*Event) error
 }
 
 func (r *RPCServer) OnMessage(msg *message.Message, reply *message.Reply) error {
 	log.Println("我收到消息了 兄弟", msg.Topic, string(msg.Payload))
-	return nil
+	event := &Event{
+		Type: Pub,
+		Msgs: []*message.Message{msg},
+	}
+
+	return r.notify(event)
 }
 
-func startRPC(addr string, logger *zap.Logger) error {
+func startRPC(addr string, logger *zap.Logger, notify func(*Event) error) error {
 	s := &RPCServer{
-		name: addr,
+		name:   addr,
+		notify: notify,
 	}
 
 	if err := rpc.Register(s); err != nil {

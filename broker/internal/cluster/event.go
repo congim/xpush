@@ -1,6 +1,7 @@
 package cluster
 
 import (
+	"github.com/congim/xpush/pkg/message"
 	"github.com/hashicorp/memberlist"
 	"go.uber.org/zap"
 )
@@ -12,6 +13,7 @@ const (
 	Join
 	Leave
 	Update
+	Pub
 )
 
 type Event struct {
@@ -19,6 +21,7 @@ type Event struct {
 	Name string
 	Addr string
 	Port uint16
+	Msgs []*message.Message
 }
 
 type event struct {

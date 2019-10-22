@@ -33,7 +33,7 @@ func swarm(conf *config.Cluster, logger *zap.Logger, notify func(*Event) error) 
 
 func (s *Swarm) Start() error {
 	go func() {
-		if err := startRPC(s.conf.Name, s.logger); err != nil {
+		if err := startRPC(s.conf.Name, s.logger, s.notify); err != nil {
 			s.logger.Fatal("init server failed", zap.Error(err))
 			return
 		}
