@@ -16,26 +16,28 @@ import (
 )
 
 type FDB struct {
-	conf   *config.Storage
-	logger *zap.Logger
-	dbs    []*database
-	rand   *rand.Rand
+	conf     *config.Storage
+	logger   *zap.Logger
+	dbs      []*database
+	rand     *rand.Rand
+	stopC    chan struct{}
+	msgQueue chan []*message.Message
 }
 
 type database struct {
-	db  fdb.Database
-	msg subspace.Subspace
-	//counter subspace.Subspace
-	//topic   subspace.Subspace
-	//session subspace.Subspace
+	db       fdb.Database
+	msg      subspace.Subspace
+	msgQueue chan []*message.Message
 }
 
 func New(conf *config.Storage, logger *zap.Logger) *FDB {
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	return &FDB{
-		conf:   conf,
-		logger: logger,
-		rand:   r,
+		conf:     conf,
+		logger:   logger,
+		rand:     r,
+		stopC:    make(chan struct{}, 1),
+		msgQueue: make(chan []*message.Message, 500),
 	}
 }
 
@@ -68,19 +70,40 @@ func (f *FDB) init(i int) error {
 	}
 
 	msg := dir.Sub("msg-body")
-	//counter := dir.Sub("msg-count")
-	//topic := dir.Sub("topic")
-	//session := dir.Sub("session")
-
 	f.dbs[i] = &database{
-		msg: msg,
-		//counter: counter,
-		db: db,
-		//topic:   topic,
-		//session: session,
+		msg:      msg,
+		db:       db,
+		msgQueue: make(chan []*message.Message, 100),
 	}
 
 	return nil
+}
+
+func (f *FDB) store(index int) {
+	defer func() {
+		close(f.dbs[index].msgQueue)
+	}()
+	for {
+		select {
+		case <-f.stopC:
+			return
+		case msgs, ok := <-f.dbs[index].msgQueue:
+			if ok {
+				_, err := f.dbs[index].db.Transact(func(tr fdb.Transaction) (ret interface{}, err error) {
+					for _, msg := range msgs {
+						key := f.dbs[index].msg.Pack(tuple.Tuple{msg.Topic, msg.ID})
+						b, _ := msg.Encode()
+						tr.Set(key, b)
+					}
+					return
+				})
+				if err != nil {
+					f.logger.Warn("store message error", zap.Error(err))
+				}
+			}
+			break
+		}
+	}
 }
 
 func (f *FDB) Store(msgs []*message.Message) error {
@@ -88,25 +111,7 @@ func (f *FDB) Store(msgs []*message.Message) error {
 	if index >= f.conf.Threads && index < 0 {
 		return fmt.Errorf("index err, index is %d, threads is %d", index, f.conf.Threads)
 	}
-
-	_, err := f.dbs[index].db.Transact(func(tr fdb.Transaction) (ret interface{}, err error) {
-		for _, msg := range msgs {
-			key := f.dbs[index].msg.Pack(tuple.Tuple{msg.Topic, msg.ID})
-			b, _ := msg.Encode()
-			log.Println("存储", string(msg.Payload))
-			tr.Set(key, b)
-		}
-		return
-	})
-
-	//for index, msg := range msgs {
-	//	f.Get(msg.Topic, index, msg.ID)
-	//}
-
-	if err != nil {
-		f.logger.Info("store messsage error", zap.Error(err))
-	}
-
+	f.dbs[index].msgQueue <- msgs
 	return nil
 }
 
@@ -136,4 +141,8 @@ func (f *FDB) Get(topic string, count int, offset string) ([]*message.Message, e
 		return
 	})
 	return msgs, err
+}
+func (f *FDB) Close() error {
+	close(f.stopC)
+	return nil
 }

@@ -33,6 +33,7 @@ func startRPC(addr string, logger *zap.Logger) error {
 		logger.Error("net resolve tcp addr failed", zap.Error(err))
 		return err
 	}
+
 	listener, err := net.ListenTCP("tcp", tcpAddr)
 	for {
 		conn, err := listener.Accept()

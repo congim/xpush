@@ -213,6 +213,9 @@ func (c *Conn) onReceive(msg mqtt.Message) error {
 				return err
 			}
 		}
+	case mqtt.TypeOfPuback:
+
+		break
 	}
 	return nil
 }
@@ -220,7 +223,6 @@ func (c *Conn) onReceive(msg mqtt.Message) error {
 // onConnect handles the connection authorization
 func (c *Conn) onConnect(packet *mqtt.Connect) bool {
 	// @TODO 账号密码校验
-
 	c.username = string(packet.Username)
 	c.password = string(packet.Password)
 	c.clientID = string(packet.ClientID)
@@ -241,6 +243,10 @@ func (c *Conn) onConnect(packet *mqtt.Connect) bool {
 
 func (c *Conn) onSubscribe(topic string) error {
 	// @TODO 数据库中存储订阅主题信息
+	if err := c.broker.cache.Subscribe(c.username, topic); err != nil {
+		logger.Warn("subscribe cache failed", zap.Uint64("cid", c.cid), zap.String("userName", c.username), zap.String("topic", topic), zap.Error(err))
+		return err
+	}
 
 	// @TODO 建立topic和clientID直接映射关系
 	if err := c.broker.subscribe(topic, c.cid, c); err != nil {
@@ -265,6 +271,9 @@ func (c *Conn) onPublish(packet *mqtt.Publish, msg *message.Message) error {
 		}
 
 		// @TODO 计数器更新
+		if err := c.broker.cache.PubCount(msg.Topic, 1); err != nil {
+			logger.Warn("publish count failed", zap.Error(err))
+		}
 
 		// @TODO 将消息推送到其他集群上
 		_, _ = c.broker.cluster.OnAllMessage(msg)

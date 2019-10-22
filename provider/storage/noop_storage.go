@@ -22,3 +22,7 @@ func (n *noopStorage) Init() error {
 func (n *noopStorage) Store([]*message.Message) error {
 	return nil
 }
+
+func (n *noopStorage) Close() error {
+	return nil
+}

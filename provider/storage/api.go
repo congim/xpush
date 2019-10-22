@@ -10,6 +10,7 @@ import (
 type Storage interface {
 	Init() error
 	Store([]*message.Message) error
+	Close() error
 }
 
 func New(conf *config.Storage, logger *zap.Logger) Storage {

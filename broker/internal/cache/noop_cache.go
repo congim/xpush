@@ -23,6 +23,14 @@ func (n *NoopCache) Get(uint64) (string, bool) {
 	return "", false
 }
 
+func (n *NoopCache) Subscribe(userName string, topic string) error {
+	return nil
+}
+
+func (n *NoopCache) PubCount(topic string, count int) error {
+	return nil
+}
+
 func newNoopCache() *NoopCache {
 	return &NoopCache{}
 }
