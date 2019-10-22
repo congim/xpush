@@ -29,6 +29,5 @@ storage:
   threads: 10
   dbspace: "xpush"
 
-
 cache:
   name: "mem"
