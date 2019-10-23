@@ -3,6 +3,7 @@ package broker
 import (
 	"bufio"
 	"fmt"
+	"log"
 	"net"
 	"sync"
 	"time"
@@ -23,6 +24,7 @@ type Conn struct {
 	msgID     uint16
 	msgIDLock sync.Mutex
 	msgQueue  chan []*message.Message
+	pubIDs    sync.Map
 }
 
 func (c *Conn) getMsgID() (uint16, error) {
@@ -214,8 +216,18 @@ func (c *Conn) onReceive(msg mqtt.Message) error {
 			}
 		}
 	case mqtt.TypeOfPuback:
-
+		packet := msg.(*mqtt.Puback)
+		idInfo, ok := c.pubIDs.Load(packet.MessageID)
+		if ok {
+			if err := c.broker.cache.Ack(c.username, idInfo.(*msgIDInfo).topic, idInfo.(*msgIDInfo).msgID); err != nil {
+				logger.Warn("msg ack", zap.Uint64("cid", c.cid), zap.String("topic", idInfo.(*msgIDInfo).topic), zap.String("msgID", idInfo.(*msgIDInfo).msgID), zap.String("userName", c.username), zap.Error(err))
+			}
+		}
+		c.pubIDs.Delete(packet.MessageID)
 		break
+
+	default:
+		log.Println(" msg.Type() ", msg.Type())
 	}
 	return nil
 }
@@ -308,7 +320,7 @@ func (c *Conn) publish(packet *message.Message) error {
 	msgID, _ := c.getMsgID()
 	msg := mqtt.Publish{
 		Header: &mqtt.StaticHeader{
-			QOS: 0,
+			QOS: 1,
 		},
 		Topic:     []byte(packet.Topic),
 		MessageID: msgID,
@@ -316,5 +328,20 @@ func (c *Conn) publish(packet *message.Message) error {
 	}
 
 	_, err = msg.EncodeTo(c.socket)
+	if err == nil {
+		c.pubIDs.Store(msgID, newMsgIDInfo(packet.Topic, packet.ID))
+	}
 	return err
+}
+
+type msgIDInfo struct {
+	topic string
+	msgID string
+}
+
+func newMsgIDInfo(topic string, msgID string) *msgIDInfo {
+	return &msgIDInfo{
+		topic: topic,
+		msgID: msgID,
+	}
 }

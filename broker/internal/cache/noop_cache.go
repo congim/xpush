@@ -31,6 +31,10 @@ func (n *NoopCache) PubCount(topic string, count int) error {
 	return nil
 }
 
+func (n *NoopCache) Ack(userName string, topic string, msgID string) error {
+	return nil
+}
+
 func newNoopCache() *NoopCache {
 	return &NoopCache{}
 }

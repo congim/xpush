@@ -13,6 +13,7 @@ type Cache interface {
 	Get(uint64) (string, bool)
 	Subscribe(string, string) error
 	PubCount(string, int) error
+	Ack(string, string, string) error
 }
 
 func New(conf *config.Cache, l *zap.Logger) Cache {
