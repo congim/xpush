@@ -31,7 +31,11 @@ func (n *NoopCache) PubCount(topic string, count int) error {
 	return nil
 }
 
-func (n *NoopCache) Ack(userName string, topic string, msgID string) error {
+func (n *NoopCache) Ack(userName string, topic string, count uint64) error {
+	return nil
+}
+
+func (n *NoopCache) Unsubscribe(userName string, topic string) error {
 	return nil
 }
 

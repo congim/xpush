@@ -1,7 +1,6 @@
 package mem
 
 import (
-	"log"
 	"sync"
 	"sync/atomic"
 )
@@ -13,17 +12,7 @@ type Mem struct {
 	ackCounter   sync.Map
 }
 
-type receiveInfo struct {
-	lastMsgID string
-	received  uint64
-}
-
-func newreceiveInfo() *receiveInfo {
-	return &receiveInfo{}
-}
-
 func (m *Mem) Init() error {
-
 	return nil
 }
 
@@ -54,25 +43,24 @@ func (m *Mem) Subscribe(userName string, topic string) error {
 
 	user.(*sync.Map).Store(topic, 0)
 
+	// @TODO 订阅时要将当前用户已接收和最近msgID和topic当前msgid、发送量保持一致
+
 	return nil
 }
 
-func (m *Mem) Ack(userName string, topic string, msgID string) error {
+func (m *Mem) Ack(userName string, topic string, count uint64) error {
 	user, ok := m.ackCounter.Load(userName)
 	if !ok {
 		user = &sync.Map{}
 		m.ackCounter.Store(userName, user)
 	}
-	topicInfo, ok := user.(*sync.Map).Load(topic)
+	counter, ok := user.(*sync.Map).Load(topic)
 	if !ok {
-		topicInfo = newreceiveInfo()
-		user.(*sync.Map).Store(topic, topicInfo)
+		var tmpCount uint64
+		counter = &tmpCount
+		user.(*sync.Map).Store(topic, counter)
 	}
-
-	topicInfo.(*receiveInfo).lastMsgID = msgID
-	topicInfo.(*receiveInfo).received++
-
-	log.Println(topicInfo.(*receiveInfo))
+	atomic.AddUint64(counter.(*uint64), count)
 	return nil
 }
 
@@ -81,10 +69,25 @@ func (m *Mem) PubCount(topic string, count int) error {
 	if !ok {
 		var tmpCount uint64
 		counter = &tmpCount
+
 		m.topicCounter.Store(topic, counter)
 	}
-
 	atomic.AddUint64(counter.(*uint64), uint64(count))
+	return nil
+}
+
+func (m *Mem) Unsubscribe(userName string, topic string) error {
+	user, ok := m.userTopics.Load(userName)
+	if ok {
+		user.(*sync.Map).Delete(topic)
+	}
+
+	// @TODO 客户端已接收信息保存清空
+	ackUser, ok := m.ackCounter.Load(userName)
+	if !ok {
+		return nil
+	}
+	ackUser.(*sync.Map).Delete(topic)
 	return nil
 }
 

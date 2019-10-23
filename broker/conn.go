@@ -25,6 +25,7 @@ type Conn struct {
 	msgIDLock sync.Mutex
 	msgQueue  chan []*message.Message
 	pubIDs    sync.Map
+	topics    sync.Map
 }
 
 func (c *Conn) getMsgID() (uint16, error) {
@@ -106,25 +107,6 @@ func (c *Conn) readLoop() {
 	}
 }
 
-// Close terminates the connection.
-func (c *Conn) Close() error {
-	if r := recover(); r != nil {
-		//logging.LogAction("closing", fmt.Sprintf("panic recovered: %s \n %s", r, debug.Stack()))
-	}
-
-	// Unsubscribe from everything, no need to lock since each Unsubscribe is
-	// already locked. Locking the 'Close()' would result in a deadlock.
-	//for _, counter := range c.subs.All() {
-	//	c.service.onUnsubscribe(counter.Ssid, c)
-	//	c.service.notifyUnsubscribe(c, counter.Ssid, counter.Channel)
-	//}
-
-	// Close the transport and decrement the connection counter
-	//atomic.AddInt64(&c.service.connections, -1)
-	//logging.LogTarget("conn", "closed", c.guid)
-	return c.socket.Close()
-}
-
 // onReceive handles an MQTT receive.
 func (c *Conn) onReceive(msg mqtt.Message) error {
 	//defer c.MeasureElapsed("rcv."+msg.String(), time.Now())
@@ -153,7 +135,6 @@ func (c *Conn) onReceive(msg mqtt.Message) error {
 		for _, sub := range packet.Subscriptions {
 			if err := c.onSubscribe(string(sub.Topic)); err != nil {
 				ack.Qos = append(ack.Qos, 0x80) // 0x80 indicate subscription failure
-				//c.notifyError(err, packet.MessageID)
 				continue
 			}
 			// Append the QoS
@@ -169,13 +150,13 @@ func (c *Conn) onReceive(msg mqtt.Message) error {
 	case mqtt.TypeOfUnsubscribe:
 		packet := msg.(*mqtt.Unsubscribe)
 		ack := mqtt.Unsuback{MessageID: packet.MessageID}
-		// @TODO 取消订阅
 		// Unsubscribe from each subscription
-		//for _, sub := range packet.Topics {
-		//	if err := c.onUnsubscribe(sub.Topic); err != nil {
-		//		c.notifyError(err, packet.MessageID)
-		//	}
-		//}
+		for _, sub := range packet.Topics {
+			if err := c.onUnsubscribe(string(sub.Topic)); err != nil {
+				logger.Warn("onUnsubscribe failed", zap.Error(err))
+				return err
+			}
+		}
 
 		// Acknowledge the unsubscription
 		if _, err := ack.EncodeTo(c.socket); err != nil {
@@ -191,6 +172,7 @@ func (c *Conn) onReceive(msg mqtt.Message) error {
 
 	case mqtt.TypeOfDisconnect:
 		// @TODO 清理缓存等信息
+
 		return nil
 
 	case mqtt.TypeOfPublish:
@@ -219,7 +201,7 @@ func (c *Conn) onReceive(msg mqtt.Message) error {
 		packet := msg.(*mqtt.Puback)
 		idInfo, ok := c.pubIDs.Load(packet.MessageID)
 		if ok {
-			if err := c.broker.cache.Ack(c.username, idInfo.(*msgIDInfo).topic, idInfo.(*msgIDInfo).msgID); err != nil {
+			if err := c.broker.cache.Ack(c.username, idInfo.(*msgIDInfo).topic, 1); err != nil {
 				logger.Warn("msg ack", zap.Uint64("cid", c.cid), zap.String("topic", idInfo.(*msgIDInfo).topic), zap.String("msgID", idInfo.(*msgIDInfo).msgID), zap.String("userName", c.username), zap.Error(err))
 			}
 		}
@@ -263,6 +245,21 @@ func (c *Conn) onSubscribe(topic string) error {
 	// @TODO 建立topic和clientID直接映射关系
 	if err := c.broker.subscribe(topic, c.cid, c); err != nil {
 		logger.Warn("subscribe failed", zap.String("userName", c.username), zap.String("clientID", c.clientID), zap.Uint64("cid", c.cid), zap.Error(err))
+		return err
+	}
+
+	// @TODO 在conn缓存订阅的topic，在下线的时候用来清除全局的topic中的cid
+	c.topics.Store(topic, struct{}{})
+
+	return nil
+}
+
+func (c *Conn) onUnsubscribe(topic string) error {
+	if err := c.broker.cache.Unsubscribe(c.username, topic); err != nil {
+		return err
+	}
+
+	if err := c.broker.unSubscribe(topic, c.cid); err != nil {
 		return err
 	}
 	return nil
@@ -344,4 +341,30 @@ func newMsgIDInfo(topic string, msgID string) *msgIDInfo {
 		topic: topic,
 		msgID: msgID,
 	}
+}
+
+// Close terminates the connection.
+func (c *Conn) Close() error {
+	if r := recover(); r != nil {
+		//logging.LogAction("closing", fmt.Sprintf("panic recovered: %s \n %s", r, debug.Stack()))
+	}
+
+	c.topics.Range(func(topic, _ interface{}) bool {
+		_ = c.broker.logout(topic.(string), c.cid)
+		return true
+	})
+
+	_ = c.broker.cache.Logout(c.cid)
+
+	// Unsubscribe from everything, no need to lock since each Unsubscribe is
+	// already locked. Locking the 'Close()' would result in a deadlock.
+	//for _, counter := range c.subs.All() {
+	//	c.service.onUnsubscribe(counter.Ssid, c)
+	//	c.service.notifyUnsubscribe(c, counter.Ssid, counter.Channel)
+	//}
+
+	// Close the transport and decrement the connection counter
+	//atomic.AddInt64(&c.service.connections, -1)
+	//logging.LogTarget("conn", "closed", c.guid)
+	return c.socket.Close()
 }

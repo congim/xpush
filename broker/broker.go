@@ -34,16 +34,13 @@ type Broker struct {
 	uid      uid.UIDs
 	cache    cache.Cache
 
-	// protocol
 	// verify
-	// channel
 }
 
 var gBroker *Broker
 
 // New return broker struct
 func New(conf *config.Config, l *zap.Logger) *Broker {
-
 	// test start
 	msg := message.New()
 	msg.Type = message.MsgPub
@@ -184,6 +181,24 @@ func (b *Broker) subscribe(topic string, cid uint64, con *Conn) error {
 	}
 	// 这里cid本服务内自增，所以不需要查询是否存在再删除，直接保存即可
 	conns.(*sync.Map).Store(cid, con)
+	return nil
+}
+
+func (b *Broker) unSubscribe(topic string, cid uint64) error {
+	conns, ok := b.topics.Load(topic)
+	if !ok {
+		return nil
+	}
+	conns.(*sync.Map).Delete(cid)
+	return nil
+}
+
+func (b *Broker) logout(topic string, cid uint64) error {
+	conns, ok := b.topics.Load(topic)
+	if !ok {
+		return nil
+	}
+	conns.(*sync.Map).Delete(cid)
 	return nil
 }
 
