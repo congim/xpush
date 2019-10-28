@@ -1,6 +1,10 @@
 package cache
 
-import "log"
+import (
+	"log"
+
+	"github.com/congim/xpush/pkg/message"
+)
 
 type NoopCache struct {
 }
@@ -26,7 +30,7 @@ func (n *NoopCache) Subscribe(userName string, topic string) error {
 	return nil
 }
 
-func (n *NoopCache) PubCount(topic string, count int) error {
+func (n *NoopCache) PubCount(string, topic string, count int) error {
 	return nil
 }
 
@@ -36,6 +40,10 @@ func (n *NoopCache) Ack(userName string, topic string, count uint64) error {
 
 func (n *NoopCache) Unsubscribe(userName string, topic string) error {
 	return nil
+}
+
+func (n *NoopCache) UnRead(userName string, topics []string) (*message.UnRead, error) {
+	return nil, nil
 }
 
 func newNoopCache() *NoopCache {

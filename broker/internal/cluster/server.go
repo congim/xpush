@@ -23,8 +23,10 @@ func (r *RPCServer) OnMessage(msg *message.Message, reply *message.Reply) error 
 		event.Type = Pub
 	} else if msg.Type == message.Sub {
 		event.Type = Sub
+		return nil
 	} else if msg.Type == message.UnSub {
 		event.Type = UnSub
+		return nil
 	}
 
 	return r.notify(event)

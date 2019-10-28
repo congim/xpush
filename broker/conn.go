@@ -3,6 +3,7 @@ package broker
 import (
 	"bufio"
 	"fmt"
+	"log"
 	"net"
 	"sync"
 	"time"
@@ -129,7 +130,7 @@ func (c *Conn) onReceive(msg mqtt.Message) error {
 			MessageID: packet.MessageID,
 			Qos:       make([]uint8, 0, len(packet.Subscriptions)),
 		}
-		// @TODO 订阅处理
+		var topics []string
 		// Subscribe for each subscription
 		for _, sub := range packet.Subscriptions {
 			if err := c.onSubscribe(string(sub.Topic)); err != nil {
@@ -138,13 +139,20 @@ func (c *Conn) onReceive(msg mqtt.Message) error {
 			}
 			// Append the QoS
 			ack.Qos = append(ack.Qos, sub.Qos)
+			topics = append(topics, string(sub.Topic))
 		}
 
 		// Acknowledge the subscription
 		if _, err := ack.EncodeTo(c.socket); err != nil {
 			return err
 		}
-
+		// @TODO 通知有多少消息为未读
+		unReadMsgs, err := c.broker.cache.UnRead(c.username, topics)
+		if err != nil {
+			logger.Warn("unread failed", zap.Error(err))
+			return err
+		}
+		log.Println(unReadMsgs)
 	// We got an attempt to unsubscribe from a channel.
 	case mqtt.TypeOfUnsubscribe:
 		packet := msg.(*mqtt.Unsubscribe)
@@ -176,7 +184,6 @@ func (c *Conn) onReceive(msg mqtt.Message) error {
 
 	case mqtt.TypeOfPublish:
 		packet := msg.(*mqtt.Publish)
-		// @TODO 优化错误处理
 		msg := message.New()
 		if err := msg.Decode(packet.Payload); err != nil {
 			logger.Warn("msg decode failed", zap.Error(err))
@@ -252,11 +259,11 @@ func (c *Conn) onSubscribe(topic string) error {
 	c.topics.Store(topic, struct{}{})
 
 	// topic落到那台机器上,全局通知一下
-	_, _ = c.broker.cluster.OnAllMessage(&message.Message{
-		Type:    message.Sub,
-		Topic:   topic,
-		Payload: []byte(c.broker.conf.Cluster.Name),
-	})
+	//_, _ = c.broker.cluster.OnAllMessage(&message.Message{
+	//	Type:    message.Sub,
+	//	Topic:   topic,
+	//	Payload: []byte(c.broker.conf.Cluster.Name),
+	//})
 
 	return nil
 }
@@ -269,11 +276,11 @@ func (c *Conn) onUnsubscribe(topic string) error {
 	if err := c.broker.unSubscribe(topic, c.cid); err != nil {
 		return err
 	}
-	_, _ = c.broker.cluster.OnAllMessage(&message.Message{
-		Type:    message.UnSub,
-		Topic:   topic,
-		Payload: []byte(c.broker.conf.Cluster.Name),
-	})
+	//_, _ = c.broker.cluster.OnAllMessage(&message.Message{
+	//	Type:    message.UnSub,
+	//	Topic:   topic,
+	//	Payload: []byte(c.broker.conf.Cluster.Name),
+	//})
 	return nil
 }
 
@@ -290,7 +297,7 @@ func (c *Conn) onPublish(packet *mqtt.Publish, msg *message.Message) error {
 			//return err
 		}
 		// 计数器更新
-		if err := c.broker.cache.PubCount(msg.Topic, 1); err != nil {
+		if err := c.broker.cache.PubCount(c.username, msg.Topic, 1); err != nil {
 			logger.Warn("publish count failed", zap.Error(err))
 		}
 		// 将消息推送到其他集群上

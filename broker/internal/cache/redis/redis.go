@@ -4,6 +4,7 @@ import (
 	"log"
 
 	"github.com/congim/xpush/config"
+	"github.com/congim/xpush/pkg/message"
 	"github.com/go-redis/redis"
 	"go.uber.org/zap"
 )
@@ -94,21 +95,19 @@ func (r *Redis) Subscribe(userName string, topic string) error {
 		_, err := strCmd.Result()
 		if err == redis.Nil {
 			if !r.conf.IsCluster {
-				r.client.Set(topic, 0, 0)
+				r.client.Set(topic, 1, 0)
 			} else {
-				r.clusterClient.Set(topic, 0, 0)
+				r.clusterClient.Set(topic, 1, 0)
 			}
-			return nil
 		} else if err != nil {
 			r.logger.Warn("Get failed", zap.String("topic", topic), zap.Error(strCmd.Err()))
 			return err
 		}
 
 		// 如果主题消息数为0的情况，那么给这个主题设置发送量为0
-		sendCount, err := strCmd.Uint64()
-		if err != nil {
-			r.logger.Warn("strCmd Uint64 failed", zap.String("topic", topic), zap.Error(strCmd.Err()))
-			return err
+		sendCount, _ := strCmd.Uint64()
+		if sendCount == 0 {
+			sendCount = 1
 		}
 
 		// 保持一致
@@ -139,12 +138,79 @@ func (r *Redis) Unsubscribe(userName string, topic string) error {
 	return nil
 }
 
-func (r *Redis) PubCount(topic string, count int) error {
+func (r *Redis) PubCount(userName string, topic string, count int) error {
+	if !r.conf.IsCluster {
+		r.client.IncrBy(topic, int64(count))
+		r.client.HIncrBy(userName, topic, int64(count))
+	} else {
+		r.clusterClient.IncrBy(topic, int64(count))
+		r.clusterClient.HIncrBy(userName, topic, int64(count))
+	}
 	return nil
 }
 
 func (r *Redis) Ack(userName string, topic string, count uint64) error {
+	var intCmd *redis.IntCmd
+	// 保持一致
+	if !r.conf.IsCluster {
+		intCmd = r.client.HIncrBy(userName, topic, int64(count))
+	} else {
+		intCmd = r.clusterClient.HIncrBy(userName, topic, int64(count))
+	}
+	if intCmd.Err() != nil {
+		r.logger.Warn("HIncrBy failed", zap.Error(intCmd.Err()))
+		return intCmd.Err()
+	}
 	return nil
+}
+
+func (r *Redis) UnRead(userName string, topics []string) (*message.UnRead, error) {
+	unRead := message.NewUnRead()
+	for _, topic := range topics {
+		var totalCmd *redis.StringCmd
+		//	total
+		if !r.conf.IsCluster {
+			totalCmd = r.client.Get(topic)
+		} else {
+			totalCmd = r.client.Get(topic)
+		}
+		_, err := totalCmd.Result()
+		if err == redis.Nil {
+			unRead.Topics[topic] = 0
+			continue
+		}
+
+		// received
+		var recvCmd *redis.StringCmd
+		if !r.conf.IsCluster {
+			recvCmd = r.client.HGet(userName, topic)
+		} else {
+			recvCmd = r.clusterClient.HGet(userName, topic)
+		}
+		if recvCmd.Err() != nil {
+			r.logger.Warn("HGet failed", zap.Error(recvCmd.Err()))
+			unRead.Topics[topic] = 0
+			continue
+		}
+		total, err := totalCmd.Int64()
+		if err != nil {
+			unRead.Topics[topic] = 0
+			continue
+		}
+		recv, err := recvCmd.Int64()
+		if err != nil {
+			unRead.Topics[topic] = 0
+			continue
+		}
+		if total >= recv {
+			unRead.Topics[topic] = total - recv
+		} else {
+			unRead.Topics[topic] = 0
+		}
+
+		log.Println("主题", topic, "未接收的消息量为", total-recv, ",total=", total, ",recv=", recv)
+	}
+	return unRead, nil
 }
 
 func New(conf *config.Redis, l *zap.Logger) *Redis {
