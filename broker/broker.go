@@ -81,6 +81,11 @@ func New(conf *config.Config, l *zap.Logger) *Broker {
 
 // Start server
 func (b *Broker) Start() error {
+	if err := b.cache.Init(); err != nil {
+		b.logger.Error("cache init", zap.Error(err))
+		return err
+	}
+
 	if err := b.storage.Init(); err != nil {
 		b.logger.Error("storage init", zap.Error(err))
 		return err

@@ -3,7 +3,6 @@ package broker
 import (
 	"bufio"
 	"fmt"
-	"log"
 	"net"
 	"sync"
 	"time"
@@ -209,7 +208,8 @@ func (c *Conn) onReceive(msg mqtt.Message) error {
 		break
 
 	default:
-		log.Println(" msg.Type() ", msg.Type())
+		logger.Warn("unknown msg type", zap.Uint8("type", msg.Type()))
+		return fmt.Errorf("unknown msg type, %d", msg.Type())
 	}
 	return nil
 }
@@ -228,27 +228,27 @@ func (c *Conn) onConnect(packet *mqtt.Connect) bool {
 	c.cid = c.broker.uid.Uid()
 
 	// 缓存中存储用户登陆信息
-	if err := c.broker.cache.Login(c.cid, c.broker.conf.Cluster.Name); err != nil {
-		logger.Warn("cache login failed", zap.String("userName", c.username), zap.String("clientID", c.clientID), zap.Uint64("cid", c.cid), zap.Error(err))
-		return false
-	}
+	//if err := c.broker.cache.Login(c.cid, c.broker.conf.Cluster.Name); err != nil {
+	//	logger.Warn("cache login failed", zap.String("userName", c.username), zap.String("clientID", c.clientID), zap.Uint64("cid", c.cid), zap.Error(err))
+	//	return false
+	//}
 	return true
 }
 
 func (c *Conn) onSubscribe(topic string) error {
-	// @TODO 数据库中存储订阅主题信息
+	// 存储订阅主题信息
 	if err := c.broker.cache.Subscribe(c.username, topic); err != nil {
 		logger.Warn("subscribe cache failed", zap.Uint64("cid", c.cid), zap.String("userName", c.username), zap.String("topic", topic), zap.Error(err))
 		return err
 	}
 
-	// @TODO 建立topic和clientID直接映射关系
+	// 建立topic和clientID直接映射关系
 	if err := c.broker.subscribe(topic, c.cid, c); err != nil {
 		logger.Warn("subscribe failed", zap.String("userName", c.username), zap.String("clientID", c.clientID), zap.Uint64("cid", c.cid), zap.Error(err))
 		return err
 	}
 
-	// @TODO 在conn缓存订阅的topic，在下线的时候用来清除全局的topic中的cid
+	// 在conn缓存订阅的topic，在下线的时候用来清除全局的topic中的cid
 	c.topics.Store(topic, struct{}{})
 
 	return nil
@@ -272,21 +272,17 @@ func (c *Conn) onPublish(packet *mqtt.Publish, msg *message.Message) error {
 			logger.Warn("store msg failed", zap.Error(err))
 			return err
 		}
-
-		// @TODO 检测本机在线用并推送
+		// 检测本机在线用并推送
 		if err := c.broker.pushOnline(c.cid, msg); err != nil {
 			logger.Warn("push online failed", zap.Error(err))
 			//return err
 		}
-
-		// @TODO 计数器更新
+		// 计数器更新
 		if err := c.broker.cache.PubCount(msg.Topic, 1); err != nil {
 			logger.Warn("publish count failed", zap.Error(err))
 		}
-
-		// @TODO 将消息推送到其他集群上
+		// 将消息推送到其他集群上
 		_, _ = c.broker.cluster.OnAllMessage(msg)
-		//log.Println(replys)
 
 		break
 	case message.MsgPull:
@@ -295,10 +291,6 @@ func (c *Conn) onPublish(packet *mqtt.Publish, msg *message.Message) error {
 	default:
 		return fmt.Errorf("unknow msg type, type is %d", msg.Type)
 	}
-
-	// 消息存储
-	// 集群同步&&推送消息
-	// 计数器
 	return nil
 }
 
@@ -351,20 +343,9 @@ func (c *Conn) Close() error {
 
 	c.topics.Range(func(topic, _ interface{}) bool {
 		_ = c.broker.logout(topic.(string), c.cid)
+		//_ = c.broker.cache.Logout(topic.(string), c.broker.conf.Cluster.Name)
 		return true
 	})
 
-	_ = c.broker.cache.Logout(c.cid)
-
-	// Unsubscribe from everything, no need to lock since each Unsubscribe is
-	// already locked. Locking the 'Close()' would result in a deadlock.
-	//for _, counter := range c.subs.All() {
-	//	c.service.onUnsubscribe(counter.Ssid, c)
-	//	c.service.notifyUnsubscribe(c, counter.Ssid, counter.Channel)
-	//}
-
-	// Close the transport and decrement the connection counter
-	//atomic.AddInt64(&c.service.connections, -1)
-	//logging.LogTarget("conn", "closed", c.guid)
 	return c.socket.Close()
 }

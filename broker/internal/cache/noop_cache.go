@@ -9,8 +9,7 @@ func (n *NoopCache) Init() error {
 	return nil
 }
 
-func (n *NoopCache) Logout(cid uint64) error {
-	log.Println(cid)
+func (n *NoopCache) Logout(string, string) error {
 	return nil
 }
 
@@ -19,7 +18,7 @@ func (n *NoopCache) Login(cid uint64, name string) error {
 	return nil
 }
 
-func (n *NoopCache) Get(uint64) (string, bool) {
+func (n *NoopCache) GetBroker(uint64) (string, bool) {
 	return "", false
 }
 

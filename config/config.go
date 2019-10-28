@@ -51,7 +51,14 @@ type Storage struct {
 }
 
 type Cache struct {
-	Name string
+	Name  string
+	Redis *Redis
+}
+
+type Redis struct {
+	IsCluster bool
+	Addr      string
+	Addrs     []string
 }
 
 // New config struct

@@ -5,6 +5,7 @@ go 1.12
 require (
 	github.com/apple/foundationdb v0.0.0-20190724023245-90ba203c166c
 	github.com/apple/foundationdb/bindings/go v0.0.0-20190724023245-90ba203c166c
+	github.com/go-redis/redis v6.15.6+incompatible
 	github.com/golang/protobuf v1.3.2
 	github.com/gorilla/websocket v1.4.1
 	github.com/hashicorp/memberlist v0.1.5

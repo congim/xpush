@@ -30,4 +30,14 @@ storage:
   dbspace: "xpush"
 
 cache:
-  name: "mem"
+  name: "redis"
+  redis:
+    is_cluster: false
+    addr: "127.0.0.1:6379"
+    addrs:
+      - "x"
+      - "x"
+      - "x"
+      - "x"
+      - "x"
+      - "x"
