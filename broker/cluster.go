@@ -18,6 +18,21 @@ func notify(event *cluster.Event) error {
 	case cluster.Update:
 		gBroker.logger.Debug("Update", zap.String("name", event.Name))
 		break
+	//case cluster.Sub:
+	//	for _, msg := range event.Msgs {
+	//		_ = gBroker.sub(msg)
+	//	}
+	//	break
+	//case cluster.UnSub, cluster.Logout:
+	//	for _, msg := range event.Msgs {
+	//		_ = gBroker.unsub(msg)
+	//	}
+	//	break
+	//case cluster.Logout:
+	//	for _, msg := range event.Msgs {
+	//		_ = gBroker.unsub(msg)
+	//	}
+	//	break
 	case cluster.Pub:
 		for _, msg := range event.Msgs {
 			if err := gBroker.pushOnlineWithoutOwner(msg); err != nil {
@@ -25,7 +40,6 @@ func notify(event *cluster.Event) error {
 				continue
 			}
 		}
-
 	default:
 		return fmt.Errorf("unknow type, type is %d", event.Type)
 	}

@@ -3,11 +3,11 @@ package message
 import "encoding/json"
 
 type Message struct {
-	Version byte       `msgp:"v" json:"v"`
-	Type    MsgControl `msgp:"t" json:"t"`
-	Topic   string     `msgp:"tp" json:"tp"`
-	ID      string     `msgp:"i" json:"i"`
-	Payload []byte     `msgp:"p" json:"p"`
+	Version byte   `msgp:"v" json:"v"`
+	Type    int    `msgp:"t" json:"t"`
+	Topic   string `msgp:"tp" json:"tp"`
+	ID      string `msgp:"i" json:"i"`
+	Payload []byte `msgp:"p" json:"p"`
 }
 
 func New() *Message {

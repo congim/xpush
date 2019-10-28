@@ -251,6 +251,13 @@ func (c *Conn) onSubscribe(topic string) error {
 	// 在conn缓存订阅的topic，在下线的时候用来清除全局的topic中的cid
 	c.topics.Store(topic, struct{}{})
 
+	// topic落到那台机器上,全局通知一下
+	_, _ = c.broker.cluster.OnAllMessage(&message.Message{
+		Type:    message.Sub,
+		Topic:   topic,
+		Payload: []byte(c.broker.conf.Cluster.Name),
+	})
+
 	return nil
 }
 
@@ -262,6 +269,11 @@ func (c *Conn) onUnsubscribe(topic string) error {
 	if err := c.broker.unSubscribe(topic, c.cid); err != nil {
 		return err
 	}
+	_, _ = c.broker.cluster.OnAllMessage(&message.Message{
+		Type:    message.UnSub,
+		Topic:   topic,
+		Payload: []byte(c.broker.conf.Cluster.Name),
+	})
 	return nil
 }
 

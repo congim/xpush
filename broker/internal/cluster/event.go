@@ -6,18 +6,22 @@ import (
 	"go.uber.org/zap"
 )
 
-type EventType int
+//type EventType int
 
 const (
-	_ EventType = iota
+	_ int = iota
 	Join
 	Leave
 	Update
+	Login
+	Logout
 	Pub
+	Sub
+	UnSub
 )
 
 type Event struct {
-	Type EventType
+	Type int
 	Name string
 	Addr string
 	Port uint16

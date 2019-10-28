@@ -1,7 +1,6 @@
 package cluster
 
 import (
-	"log"
 	"net"
 	"net/rpc"
 
@@ -15,10 +14,17 @@ type RPCServer struct {
 }
 
 func (r *RPCServer) OnMessage(msg *message.Message, reply *message.Reply) error {
-	log.Println("我收到消息了 兄弟", msg.Topic, string(msg.Payload))
 	event := &Event{
-		Type: Pub,
 		Msgs: []*message.Message{msg},
+	}
+
+	// 外部type和内部type转换一下
+	if msg.Type == message.MsgPub {
+		event.Type = Pub
+	} else if msg.Type == message.Sub {
+		event.Type = Sub
+	} else if msg.Type == message.UnSub {
+		event.Type = UnSub
 	}
 
 	return r.notify(event)

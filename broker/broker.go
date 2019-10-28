@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/congim/xpush/broker/internal/cache"
@@ -23,16 +24,17 @@ import (
 var logger *zap.Logger
 
 type Broker struct {
-	cluster  cluster.Cluster
-	conf     *config.Config
-	http     *http.Server
-	tcp      *tcp.Server
-	logger   *zap.Logger
-	listener *listener.Listener
-	topics   sync.Map
-	storage  storage.Storage
-	uid      uid.UIDs
-	cache    cache.Cache
+	cluster       cluster.Cluster
+	conf          *config.Config
+	http          *http.Server
+	tcp           *tcp.Server
+	logger        *zap.Logger
+	listener      *listener.Listener
+	topics        sync.Map
+	storage       storage.Storage
+	uid           uid.UIDs
+	cache         cache.Cache
+	topic2Broker2 sync.Map
 
 	// verify
 }
@@ -238,7 +240,34 @@ func (b *Broker) pushOnlineWithoutOwner(msg *message.Message) error {
 		return true
 	})
 
-	// @TODO 记录msgID to mqttID的映射关系，等待Ack的时候记录已读
+	return nil
+}
 
+func (b *Broker) sub(msg *message.Message) error {
+	broker, ok := b.topic2Broker2.Load(msg.Topic)
+	if !ok {
+		broker = &sync.Map{}
+		b.topic2Broker2.Store(msg.Topic, broker)
+	}
+	counter, ok := broker.(*sync.Map).Load(string(msg.Payload))
+	if !ok {
+		var tmpCounter int64
+		counter = &tmpCounter
+		broker.(*sync.Map).Store(string(msg.Payload), counter)
+	}
+	atomic.AddInt64(counter.(*int64), 1)
+	return nil
+}
+
+func (b *Broker) unsub(msg *message.Message) error {
+	broker, ok := b.topic2Broker2.Load(msg.Topic)
+	if !ok {
+		return nil
+	}
+	counter, ok := broker.(*sync.Map).Load(string(msg.Payload))
+	if !ok {
+		return nil
+	}
+	atomic.AddInt64(counter.(*int64), -1)
 	return nil
 }
