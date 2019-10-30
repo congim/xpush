@@ -14,6 +14,7 @@ const (
 
 //type MsgVersion byte
 //
-//const (
-//	_ MsgVersion = iota
-//)
+const (
+	NoCompress byte = iota
+	Compress
+)
