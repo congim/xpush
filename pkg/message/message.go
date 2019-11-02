@@ -12,6 +12,7 @@ type Message struct {
 	Topic   string `msgp:"tp" json:"tp"`
 	ID      string `msgp:"i" json:"i"`
 	Payload []byte `msgp:"p" json:"p"`
+	From    string `-`
 }
 
 func (m *Message) Encode() ([]byte, error) {
@@ -33,7 +34,6 @@ func Decode(body []byte) ([]*Message, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	if isCompress == Compress {
 		body, err = snappy.Decode(nil, body[1:])
 		if err != nil {

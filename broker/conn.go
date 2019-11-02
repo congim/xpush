@@ -72,11 +72,11 @@ func (c *Conn) sendLoop(stopC <-chan struct{}) {
 			return
 		case msgs, ok := <-c.msgQueue:
 			if ok {
-				for _, msg := range msgs {
-					if err := c.publish(msg); err != nil {
-						logger.Warn("pushlish failed", zap.Uint64("cid", c.cid), zap.String("topic", msg.Topic), zap.Error(err))
-					}
+				//for _, msg := range msgs {
+				if err := c.publish(msgs); err != nil {
+					logger.Warn("pushlish failed", zap.Uint64("cid", c.cid), zap.Error(err))
 				}
+				//}
 			}
 			break
 		}
@@ -184,13 +184,18 @@ func (c *Conn) onReceive(msg mqtt.Message) error {
 
 	case mqtt.TypeOfPublish:
 		packet := msg.(*mqtt.Publish)
-		msg := message.New()
-		if err := msg.Decode(packet.Payload); err != nil {
+		msgs, err := message.Decode(packet.Payload)
+		if err != nil {
 			logger.Warn("msg decode failed", zap.Error(err))
 			return err
 		}
-		if err := c.onPublish(packet, msg); err != nil {
-			logger.Warn("onPublish failed", zap.Uint64("cid", c.cid), zap.String("userName", c.username), zap.Error(err))
+
+		for _, msg := range msgs {
+			// 添加上FROM
+			msg.From = c.username
+			if err := c.onPublish(packet, msg); err != nil {
+				logger.Warn("onPublish failed", zap.Uint64("cid", c.cid), zap.String("userName", c.username), zap.Error(err))
+			}
 		}
 
 		// 计数器
@@ -207,8 +212,8 @@ func (c *Conn) onReceive(msg mqtt.Message) error {
 		packet := msg.(*mqtt.Puback)
 		idInfo, ok := c.pubIDs.Load(packet.MessageID)
 		if ok {
-			if err := c.broker.cache.Ack(c.username, idInfo.(*msgIDInfo).topic, 1); err != nil {
-				logger.Warn("msg ack", zap.Uint64("cid", c.cid), zap.String("topic", idInfo.(*msgIDInfo).topic), zap.String("msgID", idInfo.(*msgIDInfo).msgID), zap.String("userName", c.username), zap.Error(err))
+			if err := c.broker.cache.Ack(c.username, idInfo.(*msgIDInfo).topic, uint64(idInfo.(*msgIDInfo).count)); err != nil {
+				logger.Warn("msg ack", zap.Uint64("cid", c.cid), zap.String("topic", idInfo.(*msgIDInfo).topic), zap.Int("count", idInfo.(*msgIDInfo).count), zap.String("userName", c.username), zap.Error(err))
 			}
 		}
 		c.pubIDs.Delete(packet.MessageID)
@@ -291,15 +296,17 @@ func (c *Conn) onPublish(packet *mqtt.Publish, msg *message.Message) error {
 			logger.Warn("store msg failed", zap.Error(err))
 			return err
 		}
+
 		// 检测本机在线用并推送
 		if err := c.broker.pushOnline(c.cid, msg); err != nil {
 			logger.Warn("push online failed", zap.Error(err))
-			//return err
 		}
+
 		// 计数器更新
 		if err := c.broker.cache.PubCount(c.username, msg.Topic, 1); err != nil {
 			logger.Warn("publish count failed", zap.Error(err))
 		}
+
 		// 将消息推送到其他集群上
 		_, _ = c.broker.cluster.OnAllMessage(msg)
 
@@ -318,10 +325,20 @@ func (c *Conn) Publish(packet *message.Message) error {
 	return nil
 }
 
-func (c *Conn) publish(packet *message.Message) error {
-	payload, err := packet.Encode()
+func (c *Conn) publish(msgs []*message.Message) error {
+	msgCount := len(msgs)
+	var isCompress byte
+	if msgCount <= 0 {
+		return fmt.Errorf("msgs len is zero!")
+	} else if msgCount > 1 {
+		isCompress = message.Compress
+	} else {
+		isCompress = message.NoCompress
+	}
+
+	payload, err := message.Encode(msgs, isCompress)
 	if err != nil {
-		logger.Warn("packet encode failed", zap.Uint64("cid", c.cid), zap.String("topic", packet.Topic), zap.Error(err))
+		logger.Warn("packet encode failed", zap.Uint64("cid", c.cid), zap.Error(err))
 		return err
 	}
 
@@ -330,27 +347,26 @@ func (c *Conn) publish(packet *message.Message) error {
 		Header: &mqtt.StaticHeader{
 			QOS: 1,
 		},
-		Topic:     []byte(packet.Topic),
+		Topic:     []byte(msgs[0].Topic),
 		MessageID: msgID,
 		Payload:   payload,
 	}
-
 	_, err = msg.EncodeTo(c.socket)
 	if err == nil {
-		c.pubIDs.Store(msgID, newMsgIDInfo(packet.Topic, packet.ID))
+		c.pubIDs.Store(msgID, newMsgIDInfo(msgs[0].Topic, msgCount))
 	}
 	return err
 }
 
 type msgIDInfo struct {
 	topic string
-	msgID string
+	count int
 }
 
-func newMsgIDInfo(topic string, msgID string) *msgIDInfo {
+func newMsgIDInfo(topic string, count int) *msgIDInfo {
 	return &msgIDInfo{
 		topic: topic,
-		msgID: msgID,
+		count: count,
 	}
 }
 

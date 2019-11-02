@@ -2,7 +2,6 @@ package broker
 
 import (
 	"crypto/tls"
-	"log"
 	"net"
 	"net/http"
 	"sync"
@@ -44,28 +43,28 @@ var gBroker *Broker
 // New return broker struct
 func New(conf *config.Config, l *zap.Logger) *Broker {
 	// test start
-	msg := message.New()
-	msg.Type = message.MsgPub
-	msg.Topic = "test"
-	msg.ID = "123456"
-	msg.Payload = []byte("hello xpush !")
-
-	body, err := message.Encode([]*message.Message{msg}, 0)
-	if err != nil {
-		log.Println(err)
-		return nil
-	}
-
-	log.Println("编码之后", body)
-
-	msgs, err := message.Decode(body)
-	if err != nil {
-		log.Println(err)
-		return nil
-	}
-	for _, msg := range msgs {
-		log.Println("解码之后", msg)
-	}
+	//msg := message.New()
+	//msg.Type = message.MsgPub
+	//msg.Topic = "test"
+	//msg.ID = "123456"
+	//msg.Payload = []byte("hello xpush !")
+	//
+	//body, err := message.Encode([]*message.Message{msg}, 0)
+	//if err != nil {
+	//	log.Println(err)
+	//	return nil
+	//}
+	//
+	//log.Println("编码之后", string(body))
+	//
+	//msgs, err := message.Decode(body)
+	//if err != nil {
+	//	log.Println(err)
+	//	return nil
+	//}
+	//for _, msg := range msgs {
+	//	log.Println("解码之后", msg)
+	//}
 
 	// test end
 
