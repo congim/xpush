@@ -7,6 +7,7 @@ require (
 	github.com/apple/foundationdb/bindings/go v0.0.0-20190724023245-90ba203c166c
 	github.com/eclipse/paho.mqtt.golang v1.2.0 // indirect
 	github.com/go-redis/redis v6.15.6+incompatible
+	github.com/gogo/protobuf v1.3.1
 	github.com/golang/protobuf v1.3.2
 	github.com/golang/snappy v0.0.1
 	github.com/gorilla/websocket v1.4.1
@@ -15,6 +16,9 @@ require (
 	github.com/kelindar/tcp v1.0.0
 	github.com/labstack/echo v3.3.10+incompatible // indirect
 	github.com/labstack/gommon v0.3.0 // indirect
+	github.com/mailru/easyjson v0.7.0
+	github.com/philhofer/fwd v1.0.0 // indirect
+	github.com/tinylib/msgp v1.1.0
 	go.uber.org/atomic v1.4.0 // indirect
 	go.uber.org/multierr v1.2.0 // indirect
 	go.uber.org/zap v1.10.0

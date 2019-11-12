@@ -9,11 +9,6 @@ import (
 	"go.uber.org/zap"
 )
 
-//
-//const (
-//	Broker_Prefix string = "broker_"
-//)
-
 type Redis struct {
 	logger        *zap.Logger
 	conf          *config.Redis

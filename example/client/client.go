@@ -9,8 +9,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/congim/xpush/example/client/basic"
 	"github.com/congim/xpush/pkg/message"
 	"github.com/congim/xpush/pkg/network/mqtt"
+	protobuf "github.com/gogo/protobuf/proto"
+	"github.com/golang/snappy"
 )
 
 type Client struct {
@@ -119,14 +122,18 @@ func (c *Client) onReceive(msg mqtt.Message) error {
 	case mqtt.TypeOfPublish:
 		log.Println("TypeOfPublish")
 		packet := msg.(*mqtt.Publish)
-		msgs, err := message.Decode(packet.Payload)
-		if err != nil {
-			log.Println("decode failed", err)
-		} else {
-			for _, msg := range msgs {
-				log.Print("获得的消息-->>>", msg, string(msg.Payload))
-			}
+		if err := msgDecode(msg.(*mqtt.Publish)); err != nil {
+			log.Println("msgDecode", err)
+			return err
 		}
+		//msgs, err := message.Decode(packet.Payload)
+		//if err != nil {
+		//	log.Println("decode failed", err)
+		//} else {
+		//	for _, msg := range msgs {
+		//		log.Print("获得的消息-->>>", msg, string(msg.Payload))
+		//	}
+		//}
 
 		if packet.Header.QOS > 0 {
 			ack := mqtt.Puback{
@@ -139,6 +146,39 @@ func (c *Client) onReceive(msg mqtt.Message) error {
 	default:
 		return fmt.Errorf("unknown msg type, %d", msg.Type())
 	}
+	return nil
+}
+
+func msgDecode(msg *mqtt.Publish) error {
+	msgsPack := &basic.MsgsPack{}
+	if err := protobuf.Unmarshal(msg.Payload, msgsPack); err != nil {
+		log.Println("unmarshal failed", err)
+		return nil
+	}
+
+	log.Println("CompressMsg", *msgsPack.CompressMsg)
+	unitPlace := *msgsPack.CompressMsg / 1 % 10
+	if unitPlace == basic.ActionCompress {
+		cb, err := snappy.Decode(nil, msgsPack.Body)
+		if err != nil {
+			log.Println("snappy failed", err)
+			return err
+		}
+		msgsPack.Body = cb
+	}
+
+	msgs := &basic.Msgs{}
+	if err := protobuf.Unmarshal(msgsPack.Body, msgs); err != nil {
+		log.Println("unmarshal failed", err)
+		return nil
+	}
+	for _, msg := range msgs.MsgList {
+		log.Println("消息列表", string(msg.Body))
+	}
+	//if *msgsPack.CompressMsg == basic.ActionCompress {
+	//
+	//}
+
 	return nil
 }
 
@@ -172,13 +212,13 @@ func main() {
 		return
 	}
 
-	for {
-		time.Sleep(5 * time.Second)
-		if err := client.push(os.Args[3]); err != nil {
-			log.Println("客户端推送消息失败", err, os.Args[1])
-			return
-		}
-	}
+	//for {
+	//	time.Sleep(5 * time.Second)
+	//	if err := client.push(os.Args[3]); err != nil {
+	//		log.Println("客户端推送消息失败", err, os.Args[1])
+	//		return
+	//	}
+	//}
 	wg.Wait()
 }
 

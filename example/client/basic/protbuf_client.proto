@@ -1,0 +1,138 @@
+package basic;
+
+
+
+message ClientMsg {
+    optional    string  msgid = 1;    // 消息id
+    required    int32   mtype = 3;    // 消息类型
+    required    int64   time = 2;     // 消息时间
+    optional    string  nick = 4;     // 用户昵称
+    optional    string  fid = 5;      // 消息来源
+    optional    string  ftopic = 6;   // 来源topic
+    required    string  tid = 7;      // 目标operatorid
+    required    bytes   body = 8;     // 消息内容
+}
+
+message MsgsPack {
+    required    int32    compressMsg =   1 ;  // 压缩信息 百位保存压缩算法，十位压缩级别，个位保存是否压缩
+    required    bytes    body        =   2;   // 消息内容 保存的数据根据 compressMsg 来判断 压缩数据， body原始数据为 --- message Msgs 
+}
+
+// 数据打包列表
+message Msgs {
+     repeated ClientMsg   MsgList = 1;         //数据包
+}
+
+// 创建群
+message CreateGroup {
+    required    string  topic = 1;      // 群topic
+    required    string  name  = 2;      // 群昵称
+    required    int32   reqcheck = 3;   // 加群验证 1:运行任何人   2:需身份验证   3:不允许任何人
+    optional    string  label = 4;      // 群标签
+}
+
+//  群聊天信息
+message GroupChatMsg {
+    required    string  gid = 1;        // 群号
+    required    string  gnick = 2;      // 群昵称
+    required    string  body  = 3;      // 聊天信息
+}
+
+// 群查找
+message FindGroup {
+    optional    string  gid = 1;             // 群id
+    optional    string  describe  = 2;       // 描述
+}
+
+// 入群
+message JoinGroup {
+    required    string  gid = 1;              // 群id
+    optional    string  postscript  = 2;      // 附言
+    optional    string  nick  = 3;            // 用户昵称
+    optional    string  topic  = 4;           // 主topic 
+    optional    string  opid  = 5;            // operatorid
+}
+
+// 同意入群
+message AgreeJoinGroup {
+    required    string  gid = 1;              // 群id
+    optional    string  nick  = 2;            // 用户昵称
+    required    string  topic  = 3;           // 主topic 
+    required    string  opid  = 4;            // operatorid
+}
+
+// 拒绝入群
+message RefusedJoinGroup {
+    required    string  gid = 1;              // 群id
+    optional    string  postscript  = 2;      // 附言
+    optional    string  nick  = 3;            // 用户昵称
+    required    string  topic  = 4;           // 主topic 
+    optional    string  opid  = 5;            // operatorid
+}
+
+// 退出群
+message ExitGroup {
+    required    string  gid = 1;              // 群id
+    optional    string  opid  = 2;            // operatorid
+    optional    string  topic  = 3;           // 主topic 
+}
+
+// 设置管理员
+message SetAdmin {
+    required    string  gid = 1;              // 群id
+    required    string  opid  = 2;            // operatorid
+    required    string  topic  = 3;           // 主topic
+    required    int32  action  = 4;           // 动作，1:设置, 2取消设置
+    optional    string  nick  = 5;            // operatorid
+}
+
+// 删除群
+message DelGroup {
+    required    string  gid = 1;              // 群id
+    optional    string  postscript  = 2;      // 附言
+}
+
+// 踢人
+message KickGroup {
+    required    string  gid = 1;              // 群id
+    optional    string  postscript  = 2;      // 附言
+    optional    string  nick  = 3;            // 用户昵称
+    required    string  topic  = 4;           // 主topic 
+    required    string  opid  = 5;            // operatorid
+}
+
+// 返回信息
+message Response {
+    required    int32  retcode = 1;          // 返回码
+    optional    string  err_msg = 2;         // 错误信息
+    optional    bytes   other = 3;           // 拓展信息 
+}
+
+// 设备token
+message DeviceToken {
+    required    string  Token = 1;           // deviceToken
+}
+
+// 设置用户信息
+message SetUser {
+    required    string  Nick = 1;           // Nick
+}
+
+// 群用户信息
+message GroupUser {
+    required    string  sid = 1;             // 用户id
+    required    string  opid = 2;            // 用户operatorid
+    optional    string  nick = 3;            // 用户昵称
+
+}
+
+// 群信息
+message GroupMsg {
+    required    string  id = 1;              // 群id
+    required    string  topic  = 2;          // 群topic
+    required    string  nick  = 3;           // 群昵称
+    required    GroupUser master = 4;        // 群主
+    repeated    GroupUser admins = 5;        // 管理员列表
+    repeated    GroupUser users = 6;         // 用户列表
+    optional    bytes   other = 7;           // 拓展信息 
+}
