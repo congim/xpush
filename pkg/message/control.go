@@ -7,6 +7,7 @@ const (
 	MsgPull = 10001
 	Sub     = 10002
 	UnSub   = 10003
+	NewMsg  = 10004
 )
 
 //type MsgVersion byte

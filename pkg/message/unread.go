@@ -1,11 +1,27 @@
 package message
 
-type UnRead struct {
-	Topics map[string]int64 `json:"topics"`
+import "encoding/json"
+
+// Unread ...
+type Unread struct {
+	Topics map[string]bool `json:"topics"`
 }
 
-func NewUnRead() *UnRead {
-	return &UnRead{
-		Topics: make(map[string]int64),
+// Encode encode
+func (u *Unread) Encode() ([]byte, error) {
+	body, err := json.Marshal(u)
+	return body, err
+}
+
+// Decode decode
+func (u *Unread) Decode(body []byte) error {
+	err := json.Unmarshal(body, u)
+	return err
+}
+
+// NewUnread ///
+func NewUnread() *Unread {
+	return &Unread{
+		Topics: make(map[string]bool),
 	}
 }

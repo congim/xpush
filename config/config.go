@@ -59,6 +59,7 @@ type Redis struct {
 	IsCluster bool
 	Addr      string
 	Addrs     []string
+	Password  string
 }
 
 // New config struct

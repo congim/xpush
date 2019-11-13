@@ -9,10 +9,12 @@ import (
 // Cache ...
 type Cache interface {
 	Init() error
-	Subscribe(string, string) error
 	Unsubscribe(string, string) error
-	Publish(string, string) error
 	StoreMsgID(string, string, string) error
+	Publish(string, string) error
+	Unread(string, string) (bool, error)
+
+	// Subscribe(string, string) error
 	// Ack(string, string, uint64) error
 	// Login(string, string) error
 	// PubCount(string, string, int) error

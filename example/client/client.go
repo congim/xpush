@@ -134,7 +134,18 @@ func (c *Client) onReceive(msg mqtt.Message) error {
 			log.Println("decode failed", err)
 		} else {
 			for _, msg := range msgs {
-				log.Print("获得的消息-->>>", msg, string(msg.Payload))
+				if msg.Type == message.MsgPub {
+					log.Print("获得的消息-->>>", msg, string(msg.Payload))
+				} else if msg.Type == message.NewMsg {
+					unread := message.NewUnread()
+					if err := unread.Decode(msg.Payload); err != nil {
+						log.Println("unread decode failed", err)
+					}
+					for topic, isRead := range unread.Topics {
+						log.Println("主题", topic, "未读消息标志为", isRead)
+					}
+				}
+
 			}
 		}
 

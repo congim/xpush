@@ -107,6 +107,21 @@ func (c *Conn) readLoop() {
 	}
 }
 
+func (c *Conn) newMsgNotify(unread *message.Unread) error {
+	msg := message.New()
+	msg.Type = message.NewMsg
+	msg.ID = fmt.Sprintf("%d", time.Now().UnixNano())
+	body, err := unread.Encode()
+	if err != nil {
+		logger.Warn("unread encode failed", zap.Error(err))
+		return err
+	}
+
+	msg.Payload = body
+
+	return c.publishCmd([]*message.Message{msg})
+}
+
 // onReceive handles an MQTT receive.
 func (c *Conn) onReceive(msg mqtt.Message) error {
 	//defer c.MeasureElapsed("rcv."+msg.String(), time.Now())
@@ -147,13 +162,19 @@ func (c *Conn) onReceive(msg mqtt.Message) error {
 			return err
 		}
 
-		// @TODO 此处不发送多少未读消息，只提示现在有未读消息aaaaAA
-		// @TODO 通知有多少消息为未读
-		// unReadMsgs, err := c.broker.cache.UnRead(c.username, topics)
-		// if err != nil {
-		// 	logger.Warn("unread failed", zap.Error(err))
-		// 	return err
-		// }
+		unread := message.NewUnread()
+		for _, topic := range topics {
+			isRead, err := c.broker.cache.Unread(topic, c.username)
+			if err != nil {
+				logger.Warn("unread failed", zap.Error(err))
+				return err
+			}
+			unread.Topics[topic] = isRead
+		}
+		if err := c.newMsgNotify(unread); err != nil {
+			logger.Warn("notify unread msg failed", zap.Error(err))
+			return err
+		}
 		// log.Println(unReadMsgs)
 	// We got an attempt to unsubscribe from a channel.
 	case mqtt.TypeOfUnsubscribe:
@@ -336,6 +357,39 @@ func (c *Conn) publish(msgs []*message.Message) error {
 	return err
 }
 
+func (c *Conn) publishCmd(msgs []*message.Message) error {
+	var isCompress byte
+	if len(msgs) <= 0 {
+		return fmt.Errorf("msgs len is zero")
+	} else if len(msgs) > 1 {
+		isCompress = message.Compress
+	} else {
+		isCompress = message.NoCompress
+	}
+
+	payload, err := message.Encode(msgs, isCompress)
+	if err != nil {
+		logger.Warn("packet encode failed", zap.Uint64("cid", c.cid), zap.Error(err))
+		return err
+	}
+
+	msgID, _ := c.getMsgID()
+	msg := mqtt.Publish{
+		Header: &mqtt.StaticHeader{
+			QOS: 1,
+		},
+		Topic:     []byte(msgs[0].Topic),
+		MessageID: msgID,
+		Payload:   payload,
+	}
+	_, err = msg.EncodeTo(c.socket)
+	if err != nil {
+		logger.Warn("msg encode failed", zap.Uint64("cid", c.cid), zap.Error(err))
+		return err
+	}
+	return nil
+}
+
 type msgIDInfo struct {
 	topic string
 	msgID string
@@ -354,9 +408,9 @@ func (c *Conn) Close() error {
 		//logging.LogAction("closing", fmt.Sprintf("panic recovered: %s \n %s", r, debug.Stack()))
 	}
 
-	c.topics.Range(func(topic, _ interface{}) bool {
+	c.topics.Range(func(topic, msgID interface{}) bool {
 		_ = c.broker.logout(topic.(string), c.cid)
-		//_ = c.broker.cache.Logout(topic.(string), c.broker.conf.Cluster.Name)
+		_ = c.broker.cache.StoreMsgID(c.username, topic.(string), msgID.(string))
 		return true
 	})
 
