@@ -7,28 +7,32 @@ import (
 	"github.com/golang/snappy"
 )
 
+// Message msg
 type Message struct {
 	Type    int    `msgp:"t" json:"t"`
 	Topic   string `msgp:"tp" json:"tp"`
 	ID      string `msgp:"i" json:"i"`
 	Payload []byte `msgp:"p" json:"p"`
-	From    string `-`
 }
 
+// Encode encode
 func (m *Message) Encode() ([]byte, error) {
 	body, err := json.Marshal(m)
 	return body, err
 }
 
+// Decode decode
 func (m *Message) Decode(body []byte) error {
 	err := json.Unmarshal(body, m)
 	return err
 }
 
+// New new
 func New() *Message {
 	return &Message{}
 }
 
+// Decode decode
 func Decode(body []byte) ([]*Message, error) {
 	isCompress, err := tool.GetBitValue(body[0], 0)
 	if err != nil {
@@ -53,6 +57,7 @@ func Decode(body []byte) ([]*Message, error) {
 	return msgs, nil
 }
 
+// Encode encode
 func Encode(msgs []*Message, isCompress byte) ([]byte, error) {
 	body, err := json.Marshal(msgs)
 	if err != nil {

@@ -122,18 +122,21 @@ func (c *Client) onReceive(msg mqtt.Message) error {
 	case mqtt.TypeOfPublish:
 		log.Println("TypeOfPublish")
 		packet := msg.(*mqtt.Publish)
-		if err := msgDecode(msg.(*mqtt.Publish)); err != nil {
-			log.Println("msgDecode", err)
-			return err
+		// zeus 测试
+		// if err := msgDecode(msg.(*mqtt.Publish)); err != nil {
+		// 	log.Println("msgDecode", err)
+		// 	return err
+		// }
+
+		// xpush测试
+		msgs, err := message.Decode(packet.Payload)
+		if err != nil {
+			log.Println("decode failed", err)
+		} else {
+			for _, msg := range msgs {
+				log.Print("获得的消息-->>>", msg, string(msg.Payload))
+			}
 		}
-		//msgs, err := message.Decode(packet.Payload)
-		//if err != nil {
-		//	log.Println("decode failed", err)
-		//} else {
-		//	for _, msg := range msgs {
-		//		log.Print("获得的消息-->>>", msg, string(msg.Payload))
-		//	}
-		//}
 
 		if packet.Header.QOS > 0 {
 			ack := mqtt.Puback{
@@ -212,13 +215,13 @@ func main() {
 		return
 	}
 
-	//for {
-	//	time.Sleep(5 * time.Second)
-	//	if err := client.push(os.Args[3]); err != nil {
-	//		log.Println("客户端推送消息失败", err, os.Args[1])
-	//		return
-	//	}
-	//}
+	for {
+		time.Sleep(5 * time.Second)
+		if err := client.push(os.Args[3]); err != nil {
+			log.Println("客户端推送消息失败", err, os.Args[1])
+			return
+		}
+	}
 	wg.Wait()
 }
 

@@ -12,13 +12,6 @@ import (
 	"go.uber.org/zap"
 )
 
-//
-//func main() {
-//	os.Exit(realMain())
-//}
-
-//func realMain() int {
-
 func main() {
 	conf, err := config.New("config.yaml")
 	if err != nil {
@@ -41,6 +34,5 @@ func main() {
 	lg.Info("broker received Stop signal", zap.Any("signal", <-chSig))
 
 	s.Close()
-
 	return
 }

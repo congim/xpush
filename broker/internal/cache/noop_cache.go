@@ -1,8 +1,6 @@
 package cache
 
 import (
-	"log"
-
 	"github.com/congim/xpush/pkg/message"
 )
 
@@ -17,10 +15,10 @@ func (n *NoopCache) Logout(string, string) error {
 	return nil
 }
 
-func (n *NoopCache) Login(cid uint64, name string) error {
-	log.Println(cid, name)
-	return nil
-}
+// func (n *NoopCache) Login(cid uint64, name string) error {
+// 	log.Println(cid, name)
+// 	return nil
+// }
 
 func (n *NoopCache) GetBroker(uint64) (string, bool) {
 	return "", false
@@ -44,6 +42,18 @@ func (n *NoopCache) Unsubscribe(userName string, topic string) error {
 
 func (n *NoopCache) UnRead(userName string, topics []string) (*message.UnRead, error) {
 	return nil, nil
+}
+
+func (n *NoopCache) Login(userName string, brokerName string) error {
+	return nil
+}
+
+func (n *NoopCache) Publish(string, string) error {
+	return nil
+}
+
+func (n *NoopCache) StoreMsgID(string, string, string) error {
+	return nil
 }
 
 func newNoopCache() *NoopCache {

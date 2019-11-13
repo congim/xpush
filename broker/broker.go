@@ -22,6 +22,7 @@ import (
 
 var logger *zap.Logger
 
+// Broker broker
 type Broker struct {
 	cluster       cluster.Cluster
 	conf          *config.Config
@@ -42,32 +43,6 @@ var gBroker *Broker
 
 // New return broker struct
 func New(conf *config.Config, l *zap.Logger) *Broker {
-	// test start
-	//msg := message.New()
-	//msg.Type = message.MsgPub
-	//msg.Topic = "test"
-	//msg.ID = "123456"
-	//msg.Payload = []byte("hello xpush !")
-	//
-	//body, err := message.Encode([]*message.Message{msg}, 0)
-	//if err != nil {
-	//	log.Println(err)
-	//	return nil
-	//}
-	//
-	//log.Println("编码之后", string(body))
-	//
-	//msgs, err := message.Decode(body)
-	//if err != nil {
-	//	log.Println(err)
-	//	return nil
-	//}
-	//for _, msg := range msgs {
-	//	log.Println("解码之后", msg)
-	//}
-
-	// test end
-
 	gBroker = &Broker{
 		conf:    conf,
 		http:    new(http.Server),
@@ -106,8 +81,9 @@ func (b *Broker) Start() error {
 		b.logger.Error("storage init", zap.Error(err))
 		return err
 	}
+
 	// 初始化集群
-	if err := b.ClusterStart(); err != nil {
+	if err := b.clusterStart(); err != nil {
 		b.logger.Error("cluster start", zap.Error(err))
 		return err
 	}
@@ -126,7 +102,7 @@ func (b *Broker) Start() error {
 	return nil
 }
 
-func (b *Broker) ClusterStart() error {
+func (b *Broker) clusterStart() error {
 	if err := b.cluster.Start(); err != nil {
 		b.logger.Error("cluster start", zap.Error(err))
 		return err

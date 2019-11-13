@@ -3,7 +3,6 @@ package broker
 import (
 	"bufio"
 	"fmt"
-	"log"
 	"net"
 	"sync"
 	"time"
@@ -13,6 +12,7 @@ import (
 	"go.uber.org/zap"
 )
 
+// Conn conn
 type Conn struct {
 	broker    *Broker
 	socket    net.Conn // The transport used to read and write messages.
@@ -146,13 +146,15 @@ func (c *Conn) onReceive(msg mqtt.Message) error {
 		if _, err := ack.EncodeTo(c.socket); err != nil {
 			return err
 		}
+
+		// @TODO 此处不发送多少未读消息，只提示现在有未读消息aaaaAA
 		// @TODO 通知有多少消息为未读
-		unReadMsgs, err := c.broker.cache.UnRead(c.username, topics)
-		if err != nil {
-			logger.Warn("unread failed", zap.Error(err))
-			return err
-		}
-		log.Println(unReadMsgs)
+		// unReadMsgs, err := c.broker.cache.UnRead(c.username, topics)
+		// if err != nil {
+		// 	logger.Warn("unread failed", zap.Error(err))
+		// 	return err
+		// }
+		// log.Println(unReadMsgs)
 	// We got an attempt to unsubscribe from a channel.
 	case mqtt.TypeOfUnsubscribe:
 		packet := msg.(*mqtt.Unsubscribe)
@@ -191,14 +193,11 @@ func (c *Conn) onReceive(msg mqtt.Message) error {
 		}
 
 		for _, msg := range msgs {
-			// 添加上FROM
-			msg.From = c.username
 			if err := c.onPublish(packet, msg); err != nil {
 				logger.Warn("onPublish failed", zap.Uint64("cid", c.cid), zap.String("userName", c.username), zap.Error(err))
 			}
 		}
 
-		// 计数器
 		// Acknowledge the publication
 		if packet.Header.QOS > 0 {
 			ack := mqtt.Puback{
@@ -210,11 +209,9 @@ func (c *Conn) onReceive(msg mqtt.Message) error {
 		}
 	case mqtt.TypeOfPuback:
 		packet := msg.(*mqtt.Puback)
-		idInfo, ok := c.pubIDs.Load(packet.MessageID)
+		msgIDinfo, ok := c.pubIDs.Load(packet.MessageID)
 		if ok {
-			if err := c.broker.cache.Ack(c.username, idInfo.(*msgIDInfo).topic, uint64(idInfo.(*msgIDInfo).count)); err != nil {
-				logger.Warn("msg ack", zap.Uint64("cid", c.cid), zap.String("topic", idInfo.(*msgIDInfo).topic), zap.Int("count", idInfo.(*msgIDInfo).count), zap.String("userName", c.username), zap.Error(err))
-			}
+			c.storeMsgID(msgIDinfo.(*msgIDInfo).topic, msgIDinfo.(*msgIDInfo).msgID)
 		}
 		c.pubIDs.Delete(packet.MessageID)
 		break
@@ -226,6 +223,10 @@ func (c *Conn) onReceive(msg mqtt.Message) error {
 	return nil
 }
 
+func (c *Conn) storeMsgID(topic, msgID string) {
+	c.topics.Store(topic, msgID)
+}
+
 // onConnect handles the connection authorization
 func (c *Conn) onConnect(packet *mqtt.Connect) bool {
 	// @TODO 账号密码校验
@@ -235,25 +236,11 @@ func (c *Conn) onConnect(packet *mqtt.Connect) bool {
 	if 0 < packet.KeepAlive && c.keepalive < packet.KeepAlive {
 		c.keepalive = packet.KeepAlive
 	}
-
-	// 申请cid
 	c.cid = c.broker.uid.Uid()
-
-	// 缓存中存储用户登陆信息
-	//if err := c.broker.cache.Login(c.cid, c.broker.conf.Cluster.Name); err != nil {
-	//	logger.Warn("cache login failed", zap.String("userName", c.username), zap.String("clientID", c.clientID), zap.Uint64("cid", c.cid), zap.Error(err))
-	//	return false
-	//}
 	return true
 }
 
 func (c *Conn) onSubscribe(topic string) error {
-	// 存储订阅主题信息
-	if err := c.broker.cache.Subscribe(c.username, topic); err != nil {
-		logger.Warn("subscribe cache failed", zap.Uint64("cid", c.cid), zap.String("userName", c.username), zap.String("topic", topic), zap.Error(err))
-		return err
-	}
-
 	// 建立topic和clientID直接映射关系
 	if err := c.broker.subscribe(topic, c.cid, c); err != nil {
 		logger.Warn("subscribe failed", zap.String("userName", c.username), zap.String("clientID", c.clientID), zap.Uint64("cid", c.cid), zap.Error(err))
@@ -261,15 +248,7 @@ func (c *Conn) onSubscribe(topic string) error {
 	}
 
 	// 在conn缓存订阅的topic，在下线的时候用来清除全局的topic中的cid
-	c.topics.Store(topic, struct{}{})
-
-	// topic落到那台机器上,全局通知一下
-	//_, _ = c.broker.cluster.OnAllMessage(&message.Message{
-	//	Type:    message.Sub,
-	//	Topic:   topic,
-	//	Payload: []byte(c.broker.conf.Cluster.Name),
-	//})
-
+	c.topics.Store(topic, "")
 	return nil
 }
 
@@ -281,11 +260,6 @@ func (c *Conn) onUnsubscribe(topic string) error {
 	if err := c.broker.unSubscribe(topic, c.cid); err != nil {
 		return err
 	}
-	//_, _ = c.broker.cluster.OnAllMessage(&message.Message{
-	//	Type:    message.UnSub,
-	//	Topic:   topic,
-	//	Payload: []byte(c.broker.conf.Cluster.Name),
-	//})
 	return nil
 }
 
@@ -302,9 +276,12 @@ func (c *Conn) onPublish(packet *mqtt.Publish, msg *message.Message) error {
 			logger.Warn("push online failed", zap.Error(err))
 		}
 
+		// 自己推送的消息也需要更新last msgID
+		c.storeMsgID(msg.Topic, msg.ID)
+
 		// 计数器更新
-		if err := c.broker.cache.PubCount(c.username, msg.Topic, 1); err != nil {
-			logger.Warn("publish count failed", zap.Error(err))
+		if err := c.broker.cache.Publish(msg.Topic, msg.ID); err != nil {
+			logger.Warn("cache publish failed", zap.Error(err))
 		}
 
 		// 将消息推送到其他集群上
@@ -320,17 +297,18 @@ func (c *Conn) onPublish(packet *mqtt.Publish, msg *message.Message) error {
 	return nil
 }
 
+// Publish ...
 func (c *Conn) Publish(packet *message.Message) error {
 	c.msgQueue <- []*message.Message{packet}
 	return nil
 }
 
 func (c *Conn) publish(msgs []*message.Message) error {
-	msgCount := len(msgs)
+	packetMsgID := msgs[len(msgs)-1].ID
 	var isCompress byte
-	if msgCount <= 0 {
-		return fmt.Errorf("msgs len is zero!")
-	} else if msgCount > 1 {
+	if len(msgs) <= 0 {
+		return fmt.Errorf("msgs len is zero")
+	} else if len(msgs) > 1 {
 		isCompress = message.Compress
 	} else {
 		isCompress = message.NoCompress
@@ -353,20 +331,20 @@ func (c *Conn) publish(msgs []*message.Message) error {
 	}
 	_, err = msg.EncodeTo(c.socket)
 	if err == nil {
-		c.pubIDs.Store(msgID, newMsgIDInfo(msgs[0].Topic, msgCount))
+		c.pubIDs.Store(msgID, newMsgIDInfo(msgs[0].Topic, packetMsgID))
 	}
 	return err
 }
 
 type msgIDInfo struct {
 	topic string
-	count int
+	msgID string
 }
 
-func newMsgIDInfo(topic string, count int) *msgIDInfo {
+func newMsgIDInfo(topic string, msgID string) *msgIDInfo {
 	return &msgIDInfo{
 		topic: topic,
-		count: count,
+		msgID: msgID,
 	}
 }
 
