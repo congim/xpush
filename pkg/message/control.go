@@ -16,3 +16,11 @@ const (
 	NoCompress byte = iota
 	Compress
 )
+
+const (
+	MAX_MESSAGE_PULL_COUNT int = 200
+)
+
+var (
+	MSG_NEWEST_OFFSET = []byte("0")
+)

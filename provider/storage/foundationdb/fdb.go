@@ -15,13 +15,14 @@ import (
 	"go.uber.org/zap"
 )
 
+// FDB ...
 type FDB struct {
-	conf     *config.Storage
-	logger   *zap.Logger
-	dbs      []*database
-	rand     *rand.Rand
-	stopC    chan struct{}
-	msgQueue chan []*message.Message
+	conf   *config.Storage
+	logger *zap.Logger
+	dbs    []*database
+	rand   *rand.Rand
+	stopC  chan struct{}
+	//msgQueue chan []*message.Message
 }
 
 type database struct {
@@ -30,17 +31,19 @@ type database struct {
 	msgQueue chan []*message.Message
 }
 
+// New ...
 func New(conf *config.Storage, logger *zap.Logger) *FDB {
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	return &FDB{
-		conf:     conf,
-		logger:   logger,
-		rand:     r,
-		stopC:    make(chan struct{}, 1),
-		msgQueue: make(chan []*message.Message, 500),
+		conf:   conf,
+		logger: logger,
+		rand:   r,
+		stopC:  make(chan struct{}, 1),
+		//msgQueue: make(chan []*message.Message, 500),
 	}
 }
 
+// Init ...
 func (f *FDB) Init() error {
 	f.dbs = make([]*database, f.conf.Threads)
 	for i := 0; i < f.conf.Threads; i++ {
@@ -75,7 +78,7 @@ func (f *FDB) init(i int) error {
 		db:       db,
 		msgQueue: make(chan []*message.Message, 100),
 	}
-
+	go f.store(i)
 	return nil
 }
 
@@ -91,9 +94,14 @@ func (f *FDB) store(index int) {
 			if ok {
 				_, err := f.dbs[index].db.Transact(func(tr fdb.Transaction) (ret interface{}, err error) {
 					for _, msg := range msgs {
-						key := f.dbs[index].msg.Pack(tuple.Tuple{msg.Topic, msg.ID})
-						b, _ := msg.Encode()
+						key := f.dbs[index].msg.Pack(tuple.Tuple{[]byte(msg.Topic), []byte(msg.ID)})
+						b, err := msg.Encode()
+						if err != nil {
+							f.logger.Warn("msg encode error", zap.Error(err))
+							continue
+						}
 						tr.Set(key, b)
+						log.Println("insert key", key)
 					}
 					return
 				})
@@ -106,6 +114,7 @@ func (f *FDB) store(index int) {
 	}
 }
 
+// Store ...
 func (f *FDB) Store(msgs []*message.Message) error {
 	index := f.rand.Intn(f.conf.Threads)
 	if index >= f.conf.Threads && index < 0 {
@@ -115,7 +124,13 @@ func (f *FDB) Store(msgs []*message.Message) error {
 	return nil
 }
 
-func (f *FDB) Get(topic string, count int, offset string) ([]*message.Message, error) {
+var (
+	fdbStoreBegin = []byte("0")
+	fdbStoreEnd   = []byte("ff")
+)
+
+// Get ...
+func (f *FDB) Get(topic string, offset []byte, count int) ([]*message.Message, error) {
 	var msgs []*message.Message
 	index := f.rand.Intn(f.conf.Threads)
 	if index >= f.conf.Threads && index < 0 {
@@ -123,25 +138,40 @@ func (f *FDB) Get(topic string, count int, offset string) ([]*message.Message, e
 	}
 
 	_, err := f.dbs[index].db.Transact(func(tr fdb.Transaction) (ret interface{}, err error) {
-		pr, _ := fdb.PrefixRange([]byte(topic))
-		pr.Begin = f.dbs[index].msg.Pack(tuple.Tuple{[]byte(topic), []byte("0")})
+		//pr, _ := fdb.PrefixRange([]byte(topic))
 
-		pr.End = f.dbs[index].msg.Pack(tuple.Tuple{[]byte(topic), offset})
+		pr, _ := fdb.PrefixRange(f.dbs[index].msg.Pack(tuple.Tuple{[]byte(topic), offset}))
+		//pr.Begin = f.dbs[index].msg.Pack(tuple.Tuple{[]byte(topic), fdbStoreBegin})
+		//if bytes.Compare(offset, message.MSG_NEWEST_OFFSET) == 0 {
+		//	pr.End = f.dbs[index].msg.Pack(tuple.Tuple{[]byte(topic), fdbStoreEnd})
+		//} else {
+		//	pr.End = f.dbs[index].msg.Pack(tuple.Tuple{[]byte(topic), offset})
+		//}
 
+		log.Println("start key", pr.Begin)
+		log.Println("end key", pr.End)
+		log.Println("topic", topic)
+		log.Println("offset", string(offset))
+		log.Println("count", count)
 		//@performance
 		//get one by one in advance
 		ir := tr.GetRange(pr, fdb.RangeOptions{Limit: count, Reverse: true}).Iterator()
 		for ir.Advance() {
 			b := ir.MustGet().Value
 			m := &message.Message{}
-			m.Decode(b)
+			if err := m.Decode(b); err != nil {
+				f.logger.Warn("msg decode error", zap.Error(err))
+				continue
+			}
 			msgs = append(msgs, m)
-			log.Println(string(m.Payload))
+			log.Println("拉取新消息为:", m.Topic, m.ID, string(m.Payload))
 		}
 		return
 	})
 	return msgs, err
 }
+
+// Close ...
 func (f *FDB) Close() error {
 	close(f.stopC)
 	return nil

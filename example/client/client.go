@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/congim/xpush/example/client/basic"
@@ -17,7 +18,8 @@ import (
 )
 
 type Client struct {
-	socket net.Conn
+	socket   net.Conn
+	userName string
 }
 
 func NewClient() *Client {
@@ -35,6 +37,7 @@ func (c *Client) Init(addr string) error {
 }
 
 func (c *Client) Connect(userName string) error {
+	c.userName = userName
 	connPacket := mqtt.Connect{}
 	connPacket.Username = []byte(userName)
 	connPacket.UsernameFlag = true
@@ -143,7 +146,36 @@ func (c *Client) onReceive(msg mqtt.Message) error {
 					}
 					for topic, isRead := range unread.Topics {
 						log.Println("主题", topic, "未读消息标志为", isRead)
+						newMsg := message.New()
+						newMsg.Topic = topic
+						newMsg.Type = message.MsgPull
+						newMsg.ID = time.Now().String()
+						newMsg.Payload = message.PackPullMsg(10, []byte("10060"))
+						body, err := message.Encode([]*message.Message{newMsg}, message.NoCompress)
+						if err != nil {
+							log.Print("msg encode faileld", err)
+							return err
+						}
+
+						mqttPub := &mqtt.Publish{
+							Header: &mqtt.StaticHeader{
+								QOS:    1,
+								Retain: false,
+								DUP:    false,
+							},
+							Topic:     []byte(topic),
+							Payload:   body,
+							MessageID: 1,
+						}
+
+						_, err = mqttPub.EncodeTo(c.socket)
+						if err != nil {
+							log.Println("publish failed", err)
+							return err
+						}
+
 					}
+
 				}
 
 			}
@@ -226,14 +258,20 @@ func main() {
 		return
 	}
 
-	for {
-		time.Sleep(5 * time.Second)
-		if err := client.push(os.Args[3]); err != nil {
-			log.Println("客户端推送消息失败", err, os.Args[1])
-			return
-		}
-	}
+	//for {
+	//	time.Sleep(5 * time.Second)
+	//	if err := client.push(os.Args[3]); err != nil {
+	//		log.Println("客户端推送消息失败", err, os.Args[1])
+	//		return
+	//	}
+	//}
 	wg.Wait()
+}
+
+var gMsgID int32
+
+func getMsgID() int32 {
+	return 10000 + atomic.AddInt32(&gMsgID, 1)
 }
 
 func (c *Client) push(topic string) error {
@@ -242,7 +280,7 @@ func (c *Client) push(topic string) error {
 		msg := message.New()
 		msg.Type = message.MsgPub
 		msg.Topic = topic
-		msg.ID = fmt.Sprintf("%d", time.Now().UnixNano())
+		msg.ID = fmt.Sprintf("%s-%d", c.userName, getMsgID())
 		msg.Payload = []byte("hello xpush !")
 		msgs = append(msgs, msg)
 	}

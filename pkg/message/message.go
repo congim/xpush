@@ -1,6 +1,7 @@
 package message
 
 import (
+	"encoding/binary"
 	"encoding/json"
 
 	"github.com/congim/xpush/pkg/tool"
@@ -9,10 +10,11 @@ import (
 
 // Message msg
 type Message struct {
-	Type    int    `msgp:"t" json:"t"`
-	Topic   string `msgp:"tp" json:"tp"`
-	ID      string `msgp:"i" json:"i"`
-	Payload []byte `msgp:"p" json:"p"`
+	Type    int    `msgp:"t" json:"t"`   // 消息类型
+	Topic   string `msgp:"tp" json:"tp"` // 主题
+	ID      string `msgp:"i" json:"i"`   // 消息ID
+	Payload []byte `msgp:"p" json:"p"`   // 具体消息体
+	//UserID  string `msgp:"to" json:"to"` // 接收者
 }
 
 // Encode encode
@@ -81,4 +83,16 @@ func Encode(msgs []*Message, isCompress byte) ([]byte, error) {
 	copy(newBody[1:], body)
 
 	return newBody, nil
+}
+
+func PackPullMsg(count int, msgID []byte) []byte {
+	msg := make([]byte, 1+len(msgID))
+	binary.PutUvarint(msg[0:1], uint64(count))
+	copy(msg[1:], msgID)
+	return msg
+}
+
+func UnPackPullMsg(b []byte) (int, []byte) {
+	count, _ := binary.Uvarint(b[0:1])
+	return int(count), b[1:]
 }

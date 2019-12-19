@@ -26,3 +26,7 @@ func (n *noopStorage) Store([]*message.Message) error {
 func (n *noopStorage) Close() error {
 	return nil
 }
+
+func (n *noopStorage) Get(string, []byte, int) ([]*message.Message, error) {
+	return nil, nil
+}

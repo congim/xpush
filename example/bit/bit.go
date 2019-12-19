@@ -1,10 +1,9 @@
 package main
 
 import (
+	"encoding/binary"
 	"fmt"
 	"log"
-
-	"github.com/imroc/biu"
 )
 
 func getBooleanArray(b byte) []byte {
@@ -38,32 +37,44 @@ func GetBitValue(szTemp byte, nPos byte) (byte, error) {
 	return szTemp, nil
 }
 
-/**
-golang二进制bit位的常用操作，biu是一个转换二进制显示的库
-mengdj@outlook.com
-*/
+func PackPullMsg(count int, msgID []byte) []byte {
+	msg := make([]byte, 1+len(msgID))
+	binary.PutUvarint(msg[0:1], uint64(count))
+	copy(msg[1:], msgID)
+	return msg
+}
+
+func UnPackPullMsg(b []byte) (int, []byte) {
+	count, _ := binary.Uvarint(b[0:1])
+	return int(count), b[1:]
+}
+
 func main() {
+	body := PackPullMsg(100, []byte("我是消息ID"))
+	count, msgid := UnPackPullMsg(body)
+	log.Println(count, string(msgid))
+
 	//var flag uint8
 	//flag = flag | (1 << 7)
 	//fmt.Println(biu.ToBinaryString(flag), flag)
-	var szTemp byte = 128
-	fmt.Println("初始值", biu.ToBinaryString(szTemp))
-
-	var nPos byte = 7
-	ns, err := SetBitValue(szTemp, nPos, 0)
-	if err != nil {
-		log.Println(err)
-	}
-
-	fmt.Println("转换值", biu.ToBinaryString(ns))
-
-	gv, err := GetBitValue(ns, nPos)
-	if err != nil {
-		log.Println(err)
-	}
-
-	fmt.Println("获取值", biu.ToBinaryString(gv))
-	log.Println(gv)
+	//var szTemp byte = 128
+	//fmt.Println("初始值", biu.ToBinaryString(szTemp))
+	//
+	//var nPos byte = 7
+	//ns, err := SetBitValue(szTemp, nPos, 0)
+	//if err != nil {
+	//	log.Println(err)
+	//}
+	//
+	//fmt.Println("转换值", biu.ToBinaryString(ns))
+	//
+	//gv, err := GetBitValue(ns, nPos)
+	//if err != nil {
+	//	log.Println(err)
+	//}
+	//
+	//fmt.Println("获取值", biu.ToBinaryString(gv))
+	//log.Println(gv)
 
 	//var (
 	//	/**

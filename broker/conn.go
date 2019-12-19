@@ -2,7 +2,9 @@ package broker
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
+	"log"
 	"net"
 	"sync"
 	"time"
@@ -171,11 +173,11 @@ func (c *Conn) onReceive(msg mqtt.Message) error {
 			}
 			unread.Topics[topic] = isRead
 		}
+
 		if err := c.newMsgNotify(unread); err != nil {
 			logger.Warn("notify unread msg failed", zap.Error(err))
 			return err
 		}
-		// log.Println(unReadMsgs)
 	// We got an attempt to unsubscribe from a channel.
 	case mqtt.TypeOfUnsubscribe:
 		packet := msg.(*mqtt.Unsubscribe)
@@ -291,7 +293,6 @@ func (c *Conn) onPublish(packet *mqtt.Publish, msg *message.Message) error {
 			logger.Warn("store msg failed", zap.Error(err))
 			return err
 		}
-
 		// 检测本机在线用并推送
 		if err := c.broker.pushOnline(c.cid, msg); err != nil {
 			logger.Warn("push online failed", zap.Error(err))
@@ -310,7 +311,24 @@ func (c *Conn) onPublish(packet *mqtt.Publish, msg *message.Message) error {
 
 		break
 	case message.MsgPull:
+		count, offset := message.UnPackPullMsg(msg.Payload)
+		if count > message.MAX_MESSAGE_PULL_COUNT || count <= 0 {
+			return fmt.Errorf("the pull count %d is larger than :%d or equal/smaller than 0", count, message.MAX_MESSAGE_PULL_COUNT)
+		}
 
+		if _, ok := c.topics.Load(msg.Topic); !ok {
+			return errors.New("pull messages without subscribe the topic:" + msg.Topic)
+		}
+
+		msgs, err := c.broker.storage.Get(msg.Topic, offset, count)
+		if err != nil {
+			logger.Warn("load msg failed", zap.Uint64("cid", c.cid), zap.String("userName", c.username), zap.Error(err))
+			return err
+		}
+		log.Println("这里拉取信息打印", msgs, msg.Topic, string(offset), count)
+		if len(msgs) > 0 {
+			c.msgQueue <- msgs
+		}
 		break
 	default:
 		return fmt.Errorf("unknow msg type, type is %d", msg.Type)
@@ -325,6 +343,10 @@ func (c *Conn) Publish(packet *message.Message) error {
 }
 
 func (c *Conn) publish(msgs []*message.Message) error {
+	if len(msgs) == 0 {
+		return nil
+	}
+
 	packetMsgID := msgs[len(msgs)-1].ID
 	var isCompress byte
 	if len(msgs) <= 0 {
@@ -407,10 +429,11 @@ func (c *Conn) Close() error {
 	if r := recover(); r != nil {
 		//logging.LogAction("closing", fmt.Sprintf("panic recovered: %s \n %s", r, debug.Stack()))
 	}
-
 	c.topics.Range(func(topic, msgID interface{}) bool {
 		_ = c.broker.logout(topic.(string), c.cid)
-		_ = c.broker.cache.StoreMsgID(c.username, topic.(string), msgID.(string))
+		if msgID.(string) != "" {
+			_ = c.broker.cache.StoreMsgID(c.username, topic.(string), msgID.(string))
+		}
 		return true
 	})
 
