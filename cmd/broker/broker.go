@@ -19,20 +19,20 @@ func main() {
 		return
 	}
 
-	lg := logger.Init(conf.Common.LogLevel)
-	lg.Info("config", zap.Any("conf", conf))
+	brokerLog := logger.Init(conf.Common.LogLevel)
+	brokerLog.Info("config", zap.Any("conf", conf))
 
-	s := broker.New(conf, lg)
-	if err := s.Start(); err != nil {
-		lg.Error("broker start failed", zap.Error(err))
+	brokerServer := broker.New(conf, brokerLog)
+	if err := brokerServer.Start(); err != nil {
+		brokerLog.Error("broker start failed", zap.Error(err))
 		return
 	}
 
 	chSig := make(chan os.Signal)
 	signal.Notify(chSig, syscall.SIGINT, syscall.SIGTERM)
 
-	lg.Info("broker received Stop signal", zap.Any("signal", <-chSig))
+	brokerLog.Info("broker received Stop signal", zap.Any("signal", <-chSig))
 
-	s.Close()
+	brokerServer.Close()
 	return
 }
