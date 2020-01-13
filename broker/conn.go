@@ -293,8 +293,9 @@ func (c *Conn) onPublish(packet *mqtt.Publish, msg *message.Message) error {
 			logger.Warn("store msg failed", zap.Error(err))
 			return err
 		}
-		// 检测本机在线用并推送
-		if err := c.broker.pushOnline(c.cid, msg); err != nil {
+
+		// 检测在线用并推送
+		if err := c.broker.publish(c.cid, msg); err != nil {
 			logger.Warn("push online failed", zap.Error(err))
 		}
 
@@ -307,7 +308,7 @@ func (c *Conn) onPublish(packet *mqtt.Publish, msg *message.Message) error {
 		}
 
 		// 将消息推送到其他集群上
-		_, _ = c.broker.cluster.OnAllMessage(msg)
+		_, _ = c.broker.cluster.SyncMsg(msg)
 
 		break
 	case message.MsgPull:
@@ -319,16 +320,17 @@ func (c *Conn) onPublish(packet *mqtt.Publish, msg *message.Message) error {
 		if _, ok := c.topics.Load(msg.Topic); !ok {
 			return errors.New("pull messages without subscribe the topic:" + msg.Topic)
 		}
-
-		msgs, err := c.broker.storage.Get(msg.Topic, offset, count)
-		if err != nil {
-			logger.Warn("load msg failed", zap.Uint64("cid", c.cid), zap.String("userName", c.username), zap.Error(err))
-			return err
-		}
-		log.Println("这里拉取信息打印", msgs, msg.Topic, string(offset), count)
-		if len(msgs) > 0 {
-			c.msgQueue <- msgs
-		}
+		log.Println(msg.Topic, "pull msg", count, offset)
+		//
+		//msgs, err := c.broker.storage.Get(msg.Topic, offset, count)
+		//if err != nil {
+		//	logger.Warn("load msg failed", zap.Uint64("cid", c.cid), zap.String("userName", c.username), zap.Error(err))
+		//	return err
+		//}
+		//log.Println("这里拉取信息打印", msgs, msg.Topic, string(offset), count)
+		//if len(msgs) > 0 {
+		//	c.msgQueue <- msgs
+		//}
 		break
 	default:
 		return fmt.Errorf("unknow msg type, type is %d", msg.Type)

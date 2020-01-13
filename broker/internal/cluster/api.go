@@ -13,11 +13,10 @@ type Cluster interface {
 	Join() error
 	Leave(time.Duration) error
 	Close() error
-	OnMessage(string, *message.Message) (*message.Reply, error)
-	OnAllMessage(*message.Message) ([]*message.Reply, error)
+	SyncMsg(*message.Message) ([]*message.Reply, error)
 }
 
 func New(conf *config.Cluster, logger *zap.Logger, notify func(*Event) error) Cluster {
-	swarm := swarm(conf, logger, notify)
+	swarm := newSwarm(conf, logger, notify)
 	return swarm
 }

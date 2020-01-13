@@ -199,7 +199,8 @@ func (b *Broker) logout(topic string, cid uint64) error {
 	return nil
 }
 
-func (b *Broker) pushOnline(owner uint64, msg *message.Message) error {
+// publish 检查在线client并推送
+func (b *Broker) publish(owner uint64, msg *message.Message) error {
 	conns, ok := b.topics.Load(msg.Topic)
 	if !ok {
 		return nil
@@ -209,7 +210,9 @@ func (b *Broker) pushOnline(owner uint64, msg *message.Message) error {
 		if cid != owner {
 			if err := conn.(*Conn).Publish(msg); err != nil {
 				logger.Warn("push failed", zap.Uint64("cid", cid.(uint64)), zap.String("topic", msg.Topic), zap.Error(err))
+				return false
 			}
+			logger.Info("push msg", zap.Uint64("cid", cid.(uint64)), zap.String("topic", msg.Topic), zap.String("msgID", msg.ID))
 		}
 		return true
 	})
@@ -217,7 +220,7 @@ func (b *Broker) pushOnline(owner uint64, msg *message.Message) error {
 	return nil
 }
 
-func (b *Broker) pushOnlineWithoutOwner(msg *message.Message) error {
+func (b *Broker) syncMsg(msg *message.Message) error {
 	conns, ok := b.topics.Load(msg.Topic)
 	if !ok {
 		return nil
@@ -226,7 +229,9 @@ func (b *Broker) pushOnlineWithoutOwner(msg *message.Message) error {
 	conns.(*sync.Map).Range(func(cid, conn interface{}) bool {
 		if err := conn.(*Conn).Publish(msg); err != nil {
 			logger.Warn("push failed", zap.Uint64("cid", cid.(uint64)), zap.String("topic", msg.Topic), zap.Error(err))
+			return false
 		}
+		logger.Info("push msg", zap.Uint64("cid", cid.(uint64)), zap.String("topic", msg.Topic), zap.String("msgID", msg.ID))
 		return true
 	})
 

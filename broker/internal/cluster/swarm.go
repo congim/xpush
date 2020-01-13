@@ -1,7 +1,6 @@
 package cluster
 
 import (
-	"fmt"
 	"io/ioutil"
 	"sync"
 	"time"
@@ -23,7 +22,7 @@ type Swarm struct {
 	peers  sync.Map
 }
 
-func swarm(conf *config.Cluster, logger *zap.Logger, notify func(*Event) error) *Swarm {
+func newSwarm(conf *config.Cluster, logger *zap.Logger, notify func(*Event) error) *Swarm {
 	return &Swarm{
 		conf:   conf,
 		logger: logger,
@@ -94,17 +93,18 @@ func (s *Swarm) Close() error {
 	return nil
 }
 
-func (s *Swarm) OnMessage(peerName string, msg *message.Message) (*message.Reply, error) {
-	peer, ok := s.peers.Load(peerName)
-	if !ok {
-		s.logger.Warn("unfind peer", zap.String("peerName", peerName))
-		return &message.Reply{}, fmt.Errorf("unfind peerName, peer name is %s", peerName)
-	}
-	reply, err := peer.(*Peer).OnMessage(msg)
-	return reply, err
-}
+//func (s *Swarm) OnMessage(peerName string, msg *message.Message) (*message.Reply, error) {
+//	peer, ok := s.peers.Load(peerName)
+//	if !ok {
+//		s.logger.Warn("unfind peer", zap.String("peerName", peerName))
+//		return &message.Reply{}, fmt.Errorf("unfind peerName, peer name is %s", peerName)
+//	}
+//	reply, err := peer.(*Peer).OnMessage(msg)
+//	return reply, err
+//}
 
-func (s *Swarm) OnAllMessage(msg *message.Message) ([]*message.Reply, error) {
+// SyncMsg 同步消息到其他peer
+func (s *Swarm) SyncMsg(msg *message.Message) ([]*message.Reply, error) {
 	var replys []*message.Reply
 	s.peers.Range(func(peerName, peer interface{}) bool {
 		reply, err := peer.(*Peer).OnMessage(msg)

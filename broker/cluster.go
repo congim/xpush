@@ -10,32 +10,17 @@ import (
 func notify(event *cluster.Event) error {
 	switch event.Type {
 	case cluster.Join:
-		gBroker.logger.Debug("Join", zap.String("name", event.Name))
+		gBroker.logger.Info("Join", zap.String("name", event.Name))
 		break
 	case cluster.Leave:
-		gBroker.logger.Debug("Leave", zap.String("name", event.Name))
+		gBroker.logger.Info("Leave", zap.String("name", event.Name))
 		break
 	case cluster.Update:
-		gBroker.logger.Debug("Update", zap.String("name", event.Name))
+		gBroker.logger.Info("Update", zap.String("name", event.Name))
 		break
-	//case cluster.Sub:
-	//	for _, msg := range event.Msgs {
-	//		_ = gBroker.sub(msg)
-	//	}
-	//	break
-	//case cluster.UnSub, cluster.Logout:
-	//	for _, msg := range event.Msgs {
-	//		_ = gBroker.unsub(msg)
-	//	}
-	//	break
-	//case cluster.Logout:
-	//	for _, msg := range event.Msgs {
-	//		_ = gBroker.unsub(msg)
-	//	}
-	//	break
 	case cluster.Pub:
 		for _, msg := range event.Msgs {
-			if err := gBroker.pushOnlineWithoutOwner(msg); err != nil {
+			if err := gBroker.syncMsg(msg); err != nil {
 				logger.Warn("publish msg failed", zap.String("topic", msg.Topic), zap.String("msgID", msg.ID), zap.Error(err))
 				continue
 			}

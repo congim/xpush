@@ -14,7 +14,6 @@ type Message struct {
 	Topic   string `msgp:"tp" json:"tp"` // 主题
 	ID      string `msgp:"i" json:"i"`   // 消息ID
 	Payload []byte `msgp:"p" json:"p"`   // 具体消息体
-	//UserID  string `msgp:"to" json:"to"` // 接收者
 }
 
 // Encode encode
