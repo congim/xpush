@@ -4,7 +4,7 @@ common:
 
 listener:
   # 客户端链接地址
-  listenaddr: "127.0.0.1:9092"
+  listenaddr: "127.0.0.1:9090"
   readtimeout: 120
   istls: false
   certificate: "../../deploy/priv/cert.pem"
@@ -12,10 +12,10 @@ listener:
 
 cluster:
   # 节点之间通讯地址
-  name: "127.0.0.1:7072"
+  name: "127.0.0.1:7071"
   # gossip监听地址
   bindaddr: "127.0.0.1"
-  bindport: 8081
+  bindport: 8082
   seeds:
     - "127.0.0.1:8081"
     - "127.0.0.1:8082"

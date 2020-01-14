@@ -57,16 +57,6 @@ func (s *Swarm) Start() error {
 
 	s.hosts = hosts
 
-	//go func() {
-	//	for {
-	//		fmt.Println("---------------start----------------")
-	//		for _, member := range s.peers.Members() {
-	//			fmt.Printf("Member: %s %s\n", member.Name, member.Addr)
-	//		}
-	//		fmt.Println("---------------end----------------")
-	//		time.Sleep(time.Second * 3)
-	//	}
-	//}()
 	return nil
 }
 
@@ -93,21 +83,11 @@ func (s *Swarm) Close() error {
 	return nil
 }
 
-//func (s *Swarm) OnMessage(peerName string, msg *message.Message) (*message.Reply, error) {
-//	peer, ok := s.peers.Load(peerName)
-//	if !ok {
-//		s.logger.Warn("unfind peer", zap.String("peerName", peerName))
-//		return &message.Reply{}, fmt.Errorf("unfind peerName, peer name is %s", peerName)
-//	}
-//	reply, err := peer.(*Peer).OnMessage(msg)
-//	return reply, err
-//}
-
-// SyncMsg 同步消息到其他peer
-func (s *Swarm) SyncMsg(msg *message.Message) ([]*message.Reply, error) {
+// SyncMessage 同步消息到其他peer
+func (s *Swarm) SyncMessage(msg *message.Message) ([]*message.Reply, error) {
 	var replys []*message.Reply
 	s.peers.Range(func(peerName, peer interface{}) bool {
-		reply, err := peer.(*Peer).OnMessage(msg)
+		reply, err := peer.(*Peer).SyncMessage(msg)
 		if err != nil {
 			s.logger.Warn("on all message failed", zap.String("peerName", peerName.(string)), zap.String("topic", msg.Topic), zap.Error(err))
 		}

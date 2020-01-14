@@ -13,7 +13,7 @@ type Cluster interface {
 	Join() error
 	Leave(time.Duration) error
 	Close() error
-	SyncMsg(*message.Message) ([]*message.Reply, error)
+	SyncMessage(*message.Message) ([]*message.Reply, error)
 }
 
 func New(conf *config.Cluster, logger *zap.Logger, notify func(*Event) error) Cluster {

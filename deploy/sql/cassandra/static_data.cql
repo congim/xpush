@@ -1,0 +1,25 @@
+-- CREATE KEYSPACE xpush WITH replication = {'class': 'SimpleStrategy', 'replication_factor': '1'}
+--     AND durable_writes = false;
+--
+-- USE xpush;
+--
+-- -- 消息列表
+-- CREATE TABLE IF NOT EXISTS  msgs (
+--     topic               text,           -- 主题
+--     uuid                uuid,         -- 插入时间
+--     msg_id              bigint,         -- msg id
+--     payload             blob,           -- 消息体
+--     PRIMARY KEY (topic, uuid)
+-- ) WITH  CLUSTERING ORDER BY(uuid DESC);
+-- --  AND gc_grace_seconds = 10800  AND  default_time_to_live = 2592000
+--
+--
+-- CREATE TABLE IF NOT EXISTS  msgs (
+--     topic               text,           -- 主题
+--     input_date          bigint,         -- 插入时间
+--     msg_id              text,           -- msg id
+--     payload             blob,           -- 消息体
+--     PRIMARY KEY (topic, input_date, msg_id)
+-- ) WITH  CLUSTERING ORDER BY(input_date DESC);
+--
+

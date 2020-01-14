@@ -27,14 +27,6 @@ func newPeer(addr, name string, logger *zap.Logger) (*Peer, error) {
 		client: client,
 		logger: logger,
 	}
-
-	//go func() {
-	//	for {
-	//		time.Sleep(1 * time.Second)
-	//		p.OnMessage("world")
-	//	}
-	//}()
-
 	return p, nil
 }
 
@@ -45,11 +37,11 @@ func (p *Peer) Close() error {
 	return nil
 }
 
-func (p *Peer) OnMessage(msg *message.Message) (*message.Reply, error) {
+func (p *Peer) SyncMessage(msg *message.Message) (*message.Reply, error) {
 	reply := message.NewReply()
-	err := p.client.Call("RPCServer.OnMessage", msg, reply)
+	err := p.client.Call("RPCServer.SyncMessage", msg, reply)
 	if err != nil {
-		p.logger.Warn("onmessage is failed", zap.Error(err))
+		p.logger.Warn("sync msg failed", zap.Error(err))
 		return reply, err
 	}
 	return reply, nil

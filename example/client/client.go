@@ -258,13 +258,13 @@ func main() {
 		return
 	}
 
-	//for {
-	//	time.Sleep(5 * time.Second)
-	//	if err := client.push(os.Args[3]); err != nil {
-	//		log.Println("客户端推送消息失败", err, os.Args[1])
-	//		return
-	//	}
-	//}
+	for {
+		time.Sleep(5 * time.Second)
+		if err := client.push(os.Args[3]); err != nil {
+			log.Println("客户端推送消息失败", err, os.Args[1])
+			return
+		}
+	}
 	wg.Wait()
 }
 

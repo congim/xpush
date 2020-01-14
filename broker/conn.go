@@ -308,7 +308,7 @@ func (c *Conn) onPublish(packet *mqtt.Publish, msg *message.Message) error {
 		}
 
 		// 将消息推送到其他集群上
-		_, _ = c.broker.cluster.SyncMsg(msg)
+		_, _ = c.broker.cluster.SyncMessage(msg)
 
 		break
 	case message.MsgPull:
