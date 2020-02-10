@@ -11,7 +11,7 @@ type Cache interface {
 	Init() error
 	Unsubscribe(string, string) error
 	StoreMsgID(string, string, string) error
-	Publish(string, string) error
+	Inc(string, string) error
 	Unread(string, string) (bool, error)
 }
 

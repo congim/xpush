@@ -7,6 +7,7 @@ require (
 	github.com/apple/foundationdb/bindings/go v0.0.0-20190724023245-90ba203c166c
 	github.com/eclipse/paho.mqtt.golang v1.2.0 // indirect
 	github.com/go-redis/redis v6.15.6+incompatible
+	github.com/go-sql-driver/mysql v1.5.0
 	github.com/gogo/protobuf v1.3.1
 	github.com/golang/protobuf v1.3.2
 	github.com/golang/snappy v0.0.1

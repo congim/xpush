@@ -11,7 +11,7 @@ func (n *NoopCache) Unsubscribe(userName string, topic string) error {
 	return nil
 }
 
-func (n *NoopCache) Publish(string, string) error {
+func (n *NoopCache) Inc(string, string) error {
 	return nil
 }
 

@@ -5,7 +5,6 @@ import (
 	"net"
 	"net/http"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/congim/xpush/broker/internal/cache"
@@ -15,6 +14,7 @@ import (
 	"github.com/congim/xpush/pkg/message"
 	"github.com/congim/xpush/pkg/network/listener"
 	"github.com/congim/xpush/pkg/network/websocket"
+	"github.com/congim/xpush/provider/msgid"
 	"github.com/congim/xpush/provider/storage"
 	"github.com/kelindar/tcp"
 	"go.uber.org/zap"
@@ -24,19 +24,18 @@ var logger *zap.Logger
 
 // Broker broker
 type Broker struct {
-	cluster       cluster.Cluster
-	conf          *config.Config
-	http          *http.Server
-	tcp           *tcp.Server
-	logger        *zap.Logger
-	listener      *listener.Listener
-	topics        sync.Map
-	storage       storage.Storage
-	uid           uid.UIDs
-	cache         cache.Cache
-	topic2Broker2 sync.Map
-
-	// verify
+	cluster  cluster.Cluster    // 集群
+	conf     *config.Config     // conf
+	http     *http.Server       // http服务
+	tcp      *tcp.Server        // tcp
+	logger   *zap.Logger        // logger
+	listener *listener.Listener // 监听处理
+	topics   sync.Map           // 主题管理
+	storage  storage.Storage    // 存储接口
+	uid      uid.UIDs           // 内部userID
+	cache    cache.Cache        // 缓存
+	msgID    msgid.MsgID        // msgid生成
+	// verify // 合法校验
 }
 
 var gBroker *Broker
@@ -51,6 +50,7 @@ func New(conf *config.Config, l *zap.Logger) *Broker {
 		storage: storage.New(conf.Storage, l),
 		uid:     uid.New(),
 		cache:   cache.New(conf.Cache, l),
+		msgID:   msgid.New(l),
 	}
 
 	logger = l
@@ -60,8 +60,10 @@ func New(conf *config.Config, l *zap.Logger) *Broker {
 	}
 
 	mux := http.NewServeMux()
+	// http 处理
 	mux.HandleFunc("/", gBroker.onRequest)
 	gBroker.http.Handler = mux
+	// tcp 处理
 	gBroker.tcp.OnAccept = func(conn net.Conn) {
 		c := newConn(conn, gBroker, gBroker.conf.Listener.ReadTimeOut)
 		go c.Process()
@@ -125,6 +127,7 @@ func (b *Broker) Close() {
 	}
 }
 
+// websocket处理
 func (b *Broker) onRequest(w http.ResponseWriter, r *http.Request) {
 	if conn, ok := websocket.TryUpgrade(w, r); ok {
 		c := newConn(conn, b, gBroker.conf.Listener.ReadTimeOut)
@@ -220,12 +223,13 @@ func (b *Broker) publish(owner uint64, msg *message.Message) error {
 	return nil
 }
 
-func (b *Broker) syncMsg(msg *message.Message) error {
+// 通知其他集群消息
+func (b *Broker) notify(msg *message.Message) error {
+	// @TODO 并发map可能有性能瓶颈问题
 	conns, ok := b.topics.Load(msg.Topic)
 	if !ok {
 		return nil
 	}
-
 	conns.(*sync.Map).Range(func(cid, conn interface{}) bool {
 		if err := conn.(*Conn).Publish(msg); err != nil {
 			logger.Warn("push failed", zap.Uint64("cid", cid.(uint64)), zap.String("topic", msg.Topic), zap.Error(err))
@@ -238,31 +242,32 @@ func (b *Broker) syncMsg(msg *message.Message) error {
 	return nil
 }
 
-func (b *Broker) sub(msg *message.Message) error {
-	broker, ok := b.topic2Broker2.Load(msg.Topic)
-	if !ok {
-		broker = &sync.Map{}
-		b.topic2Broker2.Store(msg.Topic, broker)
-	}
-	counter, ok := broker.(*sync.Map).Load(string(msg.Payload))
-	if !ok {
-		var tmpCounter int64
-		counter = &tmpCounter
-		broker.(*sync.Map).Store(string(msg.Payload), counter)
-	}
-	atomic.AddInt64(counter.(*int64), 1)
-	return nil
-}
-
-func (b *Broker) unsub(msg *message.Message) error {
-	broker, ok := b.topic2Broker2.Load(msg.Topic)
-	if !ok {
-		return nil
-	}
-	counter, ok := broker.(*sync.Map).Load(string(msg.Payload))
-	if !ok {
-		return nil
-	}
-	atomic.AddInt64(counter.(*int64), -1)
-	return nil
-}
+//
+//func (b *Broker) sub(msg *message.Message) error {
+//	broker, ok := b.topic2Broker2.Load(msg.Topic)
+//	if !ok {
+//		broker = &sync.Map{}
+//		b.topic2Broker2.Store(msg.Topic, broker)
+//	}
+//	counter, ok := broker.(*sync.Map).Load(string(msg.Payload))
+//	if !ok {
+//		var tmpCounter int64
+//		counter = &tmpCounter
+//		broker.(*sync.Map).Store(string(msg.Payload), counter)
+//	}
+//	atomic.AddInt64(counter.(*int64), 1)
+//	return nil
+//}
+//
+//func (b *Broker) unsub(msg *message.Message) error {
+//	broker, ok := b.topic2Broker2.Load(msg.Topic)
+//	if !ok {
+//		return nil
+//	}
+//	counter, ok := broker.(*sync.Map).Load(string(msg.Payload))
+//	if !ok {
+//		return nil
+//	}
+//	atomic.AddInt64(counter.(*int64), -1)
+//	return nil
+//}

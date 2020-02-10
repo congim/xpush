@@ -25,9 +25,16 @@ limit:
   messagesize: 1024
 
 storage:
-  name: "fdb"
-  threads: 10
-  dbspace: "xpush"
+  name: "mysql"
+  fdb:
+    threads: 10
+    dbspace: "xpush"
+  mysql:
+    acc: "root"
+    passwd: "go"
+    addr: "127.0.0.1"
+    port: "3306"
+    database: "xpush"
 
 cache:
   name: "redis"

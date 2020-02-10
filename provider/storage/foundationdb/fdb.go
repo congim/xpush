@@ -17,7 +17,7 @@ import (
 
 // FDB ...
 type FDB struct {
-	conf   *config.Storage
+	conf   *config.Fdb
 	logger *zap.Logger
 	dbs    []*database
 	rand   *rand.Rand
@@ -32,7 +32,7 @@ type database struct {
 }
 
 // New ...
-func New(conf *config.Storage, logger *zap.Logger) *FDB {
+func New(conf *config.Fdb, logger *zap.Logger) *FDB {
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	return &FDB{
 		conf:   conf,

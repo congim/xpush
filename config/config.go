@@ -45,9 +45,22 @@ type Listener struct {
 }
 
 type Storage struct {
-	Name    string
+	Name  string
+	Fdb   *Fdb
+	Mysql *Mysql
+}
+
+type Fdb struct {
 	Threads int
 	DBSpace string
+}
+
+type Mysql struct {
+	Acc      string
+	Passwd   string
+	Addr     string
+	Port     string
+	Database string
 }
 
 type Cache struct {

@@ -69,8 +69,8 @@ func (r *Redis) StoreMsgID(userName string, topic string, msgID string) error {
 	return nil
 }
 
-// Publish .
-func (r *Redis) Publish(topic string, msgID string) error {
+// Inc .
+func (r *Redis) Inc(topic string, msgID string) error {
 	statusCmd := r.client.Set(topic, msgID, 0)
 	if statusCmd.Err() != nil {
 		r.logger.Warn("cache Publish failed", zap.Error(statusCmd.Err()))
@@ -81,6 +81,7 @@ func (r *Redis) Publish(topic string, msgID string) error {
 
 // Unread  ..
 func (r *Redis) Unread(topic string, userName string) (bool, error) {
+	log.Println(topic, userName)
 	newMsgInfo := r.client.Get(topic)
 	newMsgID, err := newMsgInfo.Result()
 	log.Println(userName, topic, newMsgID)

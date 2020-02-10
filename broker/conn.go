@@ -2,9 +2,7 @@ package broker
 
 import (
 	"bufio"
-	"errors"
 	"fmt"
-	"log"
 	"net"
 	"sync"
 	"time"
@@ -16,29 +14,30 @@ import (
 
 // Conn conn
 type Conn struct {
-	broker    *Broker
-	socket    net.Conn // The transport used to read and write messages.
-	username  string
-	password  string
-	keepalive uint16
-	clientID  string
-	cid       uint64
-	msgID     uint16
-	msgIDLock sync.Mutex
-	msgQueue  chan []*message.Message
-	pubIDs    sync.Map
-	topics    sync.Map
+	broker     *Broker
+	cid        uint64                  // conn id
+	socket     net.Conn                // The transport used to read and write messages.
+	username   string                  // username
+	password   string                  // password
+	clientID   string                  // clientID
+	keepalive  uint16                  // keepalive
+	mtID       uint16                  // mqtt id
+	mqttIDLock sync.Mutex              // mqttIDLock
+	sendQueue  chan []*message.Message // 发送队列
+	pubIDs     sync.Map                // pubIDs
+	topics     sync.Map                // topics
 }
 
-func (c *Conn) getMsgID() (uint16, error) {
-	c.msgIDLock.Lock()
-	defer c.msgIDLock.Unlock()
-	if c.msgID >= 65535 {
-		//return 0, fmt.Errorf("msgid exception")
-		c.msgID = 0
+// mqttID 自增ID，超出长度回滚
+func (c *Conn) mqttID() (uint16, error) {
+	c.mqttIDLock.Lock()
+	if c.mtID >= 65535 {
+		c.mtID = 0
 	}
-	c.msgID++
-	return c.msgID, nil
+	c.mtID++
+	c.mqttIDLock.Unlock()
+
+	return c.mtID, nil
 }
 
 func newConn(conn net.Conn, broker *Broker, readTout uint16) *Conn {
@@ -46,7 +45,7 @@ func newConn(conn net.Conn, broker *Broker, readTout uint16) *Conn {
 		socket:    conn,
 		broker:    broker,
 		keepalive: readTout,
-		msgQueue:  make(chan []*message.Message, 500),
+		sendQueue: make(chan []*message.Message, 500),
 	}
 }
 
@@ -72,13 +71,11 @@ func (c *Conn) sendLoop(stopC <-chan struct{}) {
 		select {
 		case <-stopC:
 			return
-		case msgs, ok := <-c.msgQueue:
+		case msgs, ok := <-c.sendQueue:
 			if ok {
-				//for _, msg := range msgs {
 				if err := c.publish(msgs); err != nil {
 					logger.Warn("pushlish failed", zap.Uint64("cid", c.cid), zap.Error(err))
 				}
-				//}
 			}
 			break
 		}
@@ -90,7 +87,10 @@ func (c *Conn) readLoop() {
 	reader := bufio.NewReaderSize(c.socket, 65536)
 	for {
 		// Set read/write deadlines so we can close dangling connections
-		_ = c.socket.SetDeadline(time.Now().Add(time.Second * time.Duration(c.keepalive)))
+		if err := c.socket.SetDeadline(time.Now().Add(time.Second * time.Duration(c.keepalive))); err != nil {
+			logger.Error("setDeadline failed", zap.Error(err))
+			return
+		}
 		//if c.limit.Limit() {
 		//	time.Sleep(50 * time.Millisecond)
 		//	continue
@@ -99,11 +99,13 @@ func (c *Conn) readLoop() {
 		// Decode an incoming MQTT packet
 		msg, err := mqtt.DecodePacket(reader, maxSize)
 		if err != nil {
+			logger.Error("mqtt decode packet failed", zap.Error(err))
 			return
 		}
 
 		// Handle the receive
 		if err := c.onReceive(msg); err != nil {
+			logger.Warn("on receive packet failed", zap.Error(err))
 			return
 		}
 	}
@@ -126,7 +128,6 @@ func (c *Conn) newMsgNotify(unread *message.Unread) error {
 
 // onReceive handles an MQTT receive.
 func (c *Conn) onReceive(msg mqtt.Message) error {
-	//defer c.MeasureElapsed("rcv."+msg.String(), time.Now())
 	switch msg.Type() {
 	// We got an attempt to connect to MQTT.
 	case mqtt.TypeOfConnect:
@@ -150,6 +151,7 @@ func (c *Conn) onReceive(msg mqtt.Message) error {
 		var topics []string
 		// Subscribe for each subscription
 		for _, sub := range packet.Subscriptions {
+			// @TODO 订阅合法性验证
 			if err := c.onSubscribe(string(sub.Topic)); err != nil {
 				ack.Qos = append(ack.Qos, 0x80) // 0x80 indicate subscription failure
 				continue
@@ -163,21 +165,21 @@ func (c *Conn) onReceive(msg mqtt.Message) error {
 		if _, err := ack.EncodeTo(c.socket); err != nil {
 			return err
 		}
-
-		unread := message.NewUnread()
-		for _, topic := range topics {
-			isRead, err := c.broker.cache.Unread(topic, c.username)
-			if err != nil {
-				logger.Warn("unread failed", zap.Error(err))
-				return err
-			}
-			unread.Topics[topic] = isRead
-		}
-
-		if err := c.newMsgNotify(unread); err != nil {
-			logger.Warn("notify unread msg failed", zap.Error(err))
-			return err
-		}
+		// @TODO 是否有必要把未读放在这里
+		//unread := message.NewUnread()
+		//for _, topic := range topics {
+		//	isRead, err := c.broker.cache.Unread(topic, c.username)
+		//	if err != nil {
+		//		logger.Warn("unread failed", zap.Error(err))
+		//		return err
+		//	}
+		//	unread.Topics[topic] = isRead
+		//}
+		//
+		//if err := c.newMsgNotify(unread); err != nil {
+		//	logger.Warn("notify unread msg failed", zap.Error(err))
+		//	return err
+		//}
 	// We got an attempt to unsubscribe from a channel.
 	case mqtt.TypeOfUnsubscribe:
 		packet := msg.(*mqtt.Unsubscribe)
@@ -208,6 +210,7 @@ func (c *Conn) onReceive(msg mqtt.Message) error {
 		return nil
 
 	case mqtt.TypeOfPublish:
+		// @TODO 推送&拉取合法性验证
 		packet := msg.(*mqtt.Publish)
 		msgs, err := message.Decode(packet.Payload)
 		if err != nil {
@@ -288,39 +291,42 @@ func (c *Conn) onUnsubscribe(topic string) error {
 
 func (c *Conn) onPublish(packet *mqtt.Publish, msg *message.Message) error {
 	switch msg.Type {
+	// @TODO 消息推送处理
 	case message.MsgPub:
-		if err := c.broker.storage.Store([]*message.Message{msg}); err != nil {
-			logger.Warn("store msg failed", zap.Error(err))
-			return err
-		}
+		// @TODO 消息存储
+		//if err := c.broker.storage.Store([]*message.Message{msg}); err != nil {
+		//	logger.Warn("store msg failed", zap.Error(err))
+		//	return err
+		//}
 
-		// 检测在线用并推送
-		if err := c.broker.publish(c.cid, msg); err != nil {
-			logger.Warn("push online failed", zap.Error(err))
-		}
+		// @TODO 检测在线用并推送
+		//if err := c.broker.publish(c.cid, msg); err != nil {
+		//	logger.Warn("push online failed", zap.Error(err))
+		//}
 
 		// 自己推送的消息也需要更新last msgID
-		c.storeMsgID(msg.Topic, msg.ID)
+		//c.storeMsgID(msg.Topic, msg.ID)
 
-		// 计数器更新
-		if err := c.broker.cache.Publish(msg.Topic, msg.ID); err != nil {
-			logger.Warn("cache publish failed", zap.Error(err))
-		}
-
-		// 将消息推送到其他集群上
-		_, _ = c.broker.cluster.SyncMessage(msg)
+		//// 计数器更新
+		//if err := c.broker.cache.Inc(msg.Topic, msg.ID); err != nil {
+		//	logger.Warn("cache publish failed", zap.Error(err))
+		//}
+		//
+		// @TODO 将消息推送到其他集群上
+		//_, _ = c.broker.cluster.SyncMessage(msg)
 
 		break
+	//	@TODO 消息拉取
 	case message.MsgPull:
-		count, offset := message.UnPackPullMsg(msg.Payload)
-		if count > message.MAX_MESSAGE_PULL_COUNT || count <= 0 {
-			return fmt.Errorf("the pull count %d is larger than :%d or equal/smaller than 0", count, message.MAX_MESSAGE_PULL_COUNT)
-		}
-
-		if _, ok := c.topics.Load(msg.Topic); !ok {
-			return errors.New("pull messages without subscribe the topic:" + msg.Topic)
-		}
-		log.Println(msg.Topic, "pull msg", count, offset)
+		//count, offset := message.UnPackPullMsg(msg.Payload)
+		//if count > message.MAX_MESSAGE_PULL_COUNT || count <= 0 {
+		//	return fmt.Errorf("the pull count %d is larger than :%d or equal/smaller than 0", count, message.MAX_MESSAGE_PULL_COUNT)
+		//}
+		//
+		//if _, ok := c.topics.Load(msg.Topic); !ok {
+		//	return errors.New("pull messages without subscribe the topic:" + msg.Topic)
+		//}
+		//log.Println(msg.Topic, "pull msg", count, offset)
 		//
 		//msgs, err := c.broker.storage.Get(msg.Topic, offset, count)
 		//if err != nil {
@@ -340,7 +346,7 @@ func (c *Conn) onPublish(packet *mqtt.Publish, msg *message.Message) error {
 
 // Publish ...
 func (c *Conn) Publish(packet *message.Message) error {
-	c.msgQueue <- []*message.Message{packet}
+	c.sendQueue <- []*message.Message{packet}
 	return nil
 }
 
@@ -365,7 +371,7 @@ func (c *Conn) publish(msgs []*message.Message) error {
 		return err
 	}
 
-	msgID, _ := c.getMsgID()
+	msgID, _ := c.mqttID()
 	msg := mqtt.Publish{
 		Header: &mqtt.StaticHeader{
 			QOS: 1,
@@ -397,7 +403,7 @@ func (c *Conn) publishCmd(msgs []*message.Message) error {
 		return err
 	}
 
-	msgID, _ := c.getMsgID()
+	msgID, _ := c.mqttID()
 	msg := mqtt.Publish{
 		Header: &mqtt.StaticHeader{
 			QOS: 1,

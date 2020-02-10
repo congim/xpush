@@ -232,6 +232,7 @@ func main() {
 	log.Println("输入参数为: ", os.Args)
 	if len(os.Args) < 4 {
 		log.Println("请输入: mqttAddr userName topic")
+		log.Println("示例输入: go run client.go 127.0.0.1:9092  scc gggg")
 		return
 	}
 	client := NewClient()
