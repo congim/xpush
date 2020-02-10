@@ -1,8 +1,6 @@
 package redis
 
 import (
-	"log"
-
 	"github.com/congim/xpush/config"
 	"github.com/go-redis/redis"
 	"go.uber.org/zap"
@@ -69,9 +67,9 @@ func (r *Redis) StoreMsgID(userName string, topic string, msgID string) error {
 	return nil
 }
 
-// Inc .
-func (r *Redis) Inc(topic string, msgID string) error {
-	statusCmd := r.client.Set(topic, msgID, 0)
+// Incr .
+func (r *Redis) Incr(key string) error {
+	statusCmd := r.client.Incr(key)
 	if statusCmd.Err() != nil {
 		r.logger.Warn("cache Publish failed", zap.Error(statusCmd.Err()))
 		return statusCmd.Err()
@@ -79,29 +77,14 @@ func (r *Redis) Inc(topic string, msgID string) error {
 	return nil
 }
 
-// Unread  ..
-func (r *Redis) Unread(topic string, userName string) (bool, error) {
-	log.Println(topic, userName)
-	newMsgInfo := r.client.Get(topic)
-	newMsgID, err := newMsgInfo.Result()
-	log.Println(userName, topic, newMsgID)
+// GetIncr  ..
+func (r *Redis) GetIncr(key string) (int, error) {
+	countInfo := r.client.Get(key)
+	count, err := countInfo.Int()
 	if err == redis.Nil {
-		return false, nil
+		return 0, nil
 	}
-
-	lastMsgInfo := r.client.HGet(LAST_MSG_ID+topic, userName)
-	lastMsgID, err := lastMsgInfo.Result()
-	log.Println(userName, LAST_MSG_ID+topic, "lastMsgID", lastMsgID)
-
-	if err == redis.Nil {
-		return true, nil
-	}
-
-	if newMsgID != lastMsgID {
-		return true, nil
-	}
-
-	return false, nil
+	return count, nil
 }
 
 // New new reids

@@ -60,9 +60,11 @@ func New(conf *config.Config, l *zap.Logger) *Broker {
 	}
 
 	mux := http.NewServeMux()
+
 	// http 处理
 	mux.HandleFunc("/", gBroker.onRequest)
 	gBroker.http.Handler = mux
+
 	// tcp 处理
 	gBroker.tcp.OnAccept = func(conn net.Conn) {
 		c := newConn(conn, gBroker, gBroker.conf.Listener.ReadTimeOut)
@@ -203,7 +205,7 @@ func (b *Broker) logout(topic string, cid uint64) error {
 }
 
 // publish 检查在线client并推送
-func (b *Broker) publish(owner uint64, msg *message.Message) error {
+func (b *Broker) publish(owner uint64, msgID string, msg *message.Message) error {
 	conns, ok := b.topics.Load(msg.Topic)
 	if !ok {
 		return nil
@@ -215,7 +217,7 @@ func (b *Broker) publish(owner uint64, msg *message.Message) error {
 				logger.Warn("push failed", zap.Uint64("cid", cid.(uint64)), zap.String("topic", msg.Topic), zap.Error(err))
 				return false
 			}
-			logger.Info("push msg", zap.Uint64("cid", cid.(uint64)), zap.String("topic", msg.Topic), zap.String("msgID", msg.ID))
+			logger.Info("push msg", zap.Uint64("cid", cid.(uint64)), zap.String("topic", msg.Topic), zap.String("msgID", msgID), zap.String("originalID", msg.ID))
 		}
 		return true
 	})

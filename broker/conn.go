@@ -21,23 +21,23 @@ type Conn struct {
 	password   string                  // password
 	clientID   string                  // clientID
 	keepalive  uint16                  // keepalive
-	mtID       uint16                  // mqtt id
 	mqttIDLock sync.Mutex              // mqttIDLock
 	sendQueue  chan []*message.Message // 发送队列
-	pubIDs     sync.Map                // pubIDs
+	pubIDs     sync.Map                // 发送消息id缓存,ack之后删除
 	topics     sync.Map                // topics
+	id         uint16                  // mqtt id
 }
 
 // mqttID 自增ID，超出长度回滚
 func (c *Conn) mqttID() (uint16, error) {
 	c.mqttIDLock.Lock()
-	if c.mtID >= 65535 {
-		c.mtID = 0
+	if c.id >= 65535 {
+		c.id = 0
 	}
-	c.mtID++
+	c.id++
 	c.mqttIDLock.Unlock()
 
-	return c.mtID, nil
+	return c.id, nil
 }
 
 func newConn(conn net.Conn, broker *Broker, readTout uint16) *Conn {
@@ -111,10 +111,19 @@ func (c *Conn) readLoop() {
 	}
 }
 
-func (c *Conn) newMsgNotify(unread *message.Unread) error {
+func (c *Conn) Unread(unread *message.Unread) error {
+	if len(unread.Topics) == 0 {
+		return nil
+	}
+
+	var err error
 	msg := message.New()
-	msg.Type = message.NewMsg
-	msg.ID = fmt.Sprintf("%d", time.Now().UnixNano())
+	msg.Type = message.MsgUnread
+	msg.ID, err = c.broker.msgID.MsgID()
+	if err != nil {
+		msg.ID = fmt.Sprintf("%d", time.Now().UnixNano())
+	}
+
 	body, err := unread.Encode()
 	if err != nil {
 		logger.Warn("unread encode failed", zap.Error(err))
@@ -165,21 +174,29 @@ func (c *Conn) onReceive(msg mqtt.Message) error {
 		if _, err := ack.EncodeTo(c.socket); err != nil {
 			return err
 		}
-		// @TODO 是否有必要把未读放在这里
-		//unread := message.NewUnread()
-		//for _, topic := range topics {
-		//	isRead, err := c.broker.cache.Unread(topic, c.username)
-		//	if err != nil {
-		//		logger.Warn("unread failed", zap.Error(err))
-		//		return err
-		//	}
-		//	unread.Topics[topic] = isRead
-		//}
-		//
-		//if err := c.newMsgNotify(unread); err != nil {
-		//	logger.Warn("notify unread msg failed", zap.Error(err))
-		//	return err
-		//}
+		unread := message.NewUnread()
+		// 是否有未读消息
+		for _, topic := range topics {
+			total, err := c.broker.cache.GetIncr(topic + message.Topic_Msg_Count)
+			if err != nil {
+				logger.Warn("get incr failed", zap.Error(err))
+				continue
+			}
+			recved, err := c.broker.cache.GetIncr(topic + "_" + c.username + message.User_Msg_Count)
+			if err != nil {
+				logger.Warn("get incr failed", zap.Error(err))
+				continue
+			}
+			count := total - recved
+			if count <= 0 {
+				continue
+			}
+			unread.Topics[topic] = count
+		}
+		if err := c.Unread(unread); err != nil {
+			logger.Warn("notify unread msg failed", zap.Error(err))
+			return err
+		}
 	// We got an attempt to unsubscribe from a channel.
 	case mqtt.TypeOfUnsubscribe:
 		packet := msg.(*mqtt.Unsubscribe)
@@ -293,27 +310,33 @@ func (c *Conn) onPublish(packet *mqtt.Publish, msg *message.Message) error {
 	switch msg.Type {
 	// @TODO 消息推送处理
 	case message.MsgPub:
-		// @TODO 消息存储
-		//if err := c.broker.storage.Store([]*message.Message{msg}); err != nil {
-		//	logger.Warn("store msg failed", zap.Error(err))
-		//	return err
-		//}
+		// @TODO 消息存储, 申请ID纪录转换
+		msgID, err := gBroker.msgID.MsgID()
+		if err != nil {
+			logger.Warn("get msg id failed", zap.Error(err))
+			return err
+		}
+
+		if err := c.broker.storage.Store([]*message.Message{msg}, []string{msgID}); err != nil {
+			logger.Warn("store msg failed", zap.Error(err))
+			return err
+		}
 
 		// @TODO 检测在线用并推送
-		//if err := c.broker.publish(c.cid, msg); err != nil {
-		//	logger.Warn("push online failed", zap.Error(err))
-		//}
+		if err := c.broker.publish(c.cid, msgID, msg); err != nil {
+			logger.Warn("push online failed", zap.Error(err))
+		}
 
-		// 自己推送的消息也需要更新last msgID
-		//c.storeMsgID(msg.Topic, msg.ID)
+		// Topic下总消息条数递增
+		c.broker.cache.Incr(msg.Topic + message.Topic_Msg_Count)
 
-		//// 计数器更新
-		//if err := c.broker.cache.Inc(msg.Topic, msg.ID); err != nil {
-		//	logger.Warn("cache publish failed", zap.Error(err))
-		//}
-		//
+		// 用户已接收条数自增(由于是自己发送的消息，所以已接收标记成自己也接收)
+		c.broker.cache.Incr(msg.Topic + "_" + c.username + message.User_Msg_Count)
+
 		// @TODO 将消息推送到其他集群上
-		//_, _ = c.broker.cluster.SyncMessage(msg)
+		if _, err = c.broker.cluster.SyncMsg(msg); err != nil {
+			logger.Warn("cluster sysnc msg failed", zap.Error(err))
+		}
 
 		break
 	//	@TODO 消息拉取
@@ -371,18 +394,18 @@ func (c *Conn) publish(msgs []*message.Message) error {
 		return err
 	}
 
-	msgID, _ := c.mqttID()
+	mqttID, _ := c.mqttID()
 	msg := mqtt.Publish{
 		Header: &mqtt.StaticHeader{
 			QOS: 1,
 		},
 		Topic:     []byte(msgs[0].Topic),
-		MessageID: msgID,
+		MessageID: mqttID,
 		Payload:   payload,
 	}
 	_, err = msg.EncodeTo(c.socket)
 	if err == nil {
-		c.pubIDs.Store(msgID, newMsgIDInfo(msgs[0].Topic, packetMsgID))
+		c.pubIDs.Store(mqttID, newMsgIDInfo(msgs[0].Topic, packetMsgID))
 	}
 	return err
 }

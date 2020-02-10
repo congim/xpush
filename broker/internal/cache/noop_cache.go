@@ -11,7 +11,7 @@ func (n *NoopCache) Unsubscribe(userName string, topic string) error {
 	return nil
 }
 
-func (n *NoopCache) Inc(string, string) error {
+func (n *NoopCache) Incr(string) error {
 	return nil
 }
 
@@ -19,8 +19,8 @@ func (n *NoopCache) StoreMsgID(string, string, string) error {
 	return nil
 }
 
-func (n *NoopCache) Unread(string, string) (bool, error) {
-	return false, nil
+func (n *NoopCache) GetIncr(string) (int, error) {
+	return 0, nil
 }
 
 func newNoopCache() *NoopCache {

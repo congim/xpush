@@ -26,9 +26,9 @@ limit:
 
 storage:
   name: "mysql"
-  fdb:
-    threads: 10
-    dbspace: "xpush"
+#  fdb:
+#    threads: 10
+#    dbspace: "xpush"
   mysql:
     acc: "root"
     passwd: "go"
@@ -44,9 +44,4 @@ cache:
     addr: "127.0.0.1:6379"
     password: ""
     addrs:
-      - "x"
-      - "x"
-      - "x"
-      - "x"
-      - "x"
       - "x"

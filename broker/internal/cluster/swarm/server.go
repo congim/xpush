@@ -10,28 +10,19 @@ import (
 
 type RPCServer struct {
 	name   string
-	notify func(*Event) error
+	notify func(*message.Event) error
 }
 
 func (r *RPCServer) SyncMessage(msg *message.Message, reply *message.Reply) error {
-	event := &Event{
+	event := &message.Event{
 		Msgs: []*message.Message{msg},
+		Type: msg.Type,
 	}
 
-	// 外部type和内部type转换一下
-	if msg.Type == message.MsgPub {
-		event.Type = Pub
-	} else if msg.Type == message.Sub {
-		event.Type = Sub
-		return nil
-	} else if msg.Type == message.UnSub {
-		event.Type = UnSub
-		return nil
-	}
 	return r.notify(event)
 }
 
-func startRPC(addr string, logger *zap.Logger, notify func(*Event) error) error {
+func startRPC(addr string, logger *zap.Logger, notify func(*message.Event) error) error {
 	s := &RPCServer{
 		name:   addr,
 		notify: notify,

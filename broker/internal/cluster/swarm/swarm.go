@@ -11,18 +11,18 @@ import (
 	"go.uber.org/zap"
 )
 
-var _ Cluster = (*Swarm)(nil)
+//var _ Cluster = (*Swarm)(nil)
 
 type Swarm struct {
 	sync.Mutex
 	conf   *config.Cluster
 	logger *zap.Logger
-	notify func(*Event) error
+	notify func(*message.Event) error
 	hosts  *memberlist.Memberlist
 	peers  sync.Map
 }
 
-func newSwarm(conf *config.Cluster, logger *zap.Logger, notify func(*Event) error) *Swarm {
+func New(conf *config.Cluster, logger *zap.Logger, notify func(*message.Event) error) *Swarm {
 	return &Swarm{
 		conf:   conf,
 		logger: logger,
@@ -83,8 +83,8 @@ func (s *Swarm) Close() error {
 	return nil
 }
 
-// SyncMessage 同步消息到其他peer
-func (s *Swarm) SyncMessage(msg *message.Message) ([]*message.Reply, error) {
+// SyncMsg 同步消息到其他peer
+func (s *Swarm) SyncMsg(msg *message.Message) ([]*message.Reply, error) {
 	var replys []*message.Reply
 	s.peers.Range(func(peerName, peer interface{}) bool {
 		reply, err := peer.(*Peer).SyncMessage(msg)

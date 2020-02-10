@@ -6,28 +6,6 @@ import (
 	"go.uber.org/zap"
 )
 
-//type EventType int
-
-const (
-	_ int = iota
-	Join
-	Leave
-	Update
-	Login
-	Logout
-	Pub
-	Sub
-	UnSub
-)
-
-type Event struct {
-	Type int
-	Name string
-	Addr string
-	Port uint16
-	Msgs []*message.Message
-}
-
 type event struct {
 	s      *Swarm
 	logger *zap.Logger
@@ -41,8 +19,8 @@ func newEvent(s *Swarm, logger *zap.Logger) *event {
 }
 
 func (e *event) NotifyJoin(n *memberlist.Node) {
-	event := &Event{
-		Type: Join,
+	event := &message.Event{
+		Type: message.ClusterJoin,
 		Name: n.Name,
 		Addr: n.Addr.String(),
 		Port: n.Port,
@@ -68,8 +46,8 @@ func (e *event) NotifyJoin(n *memberlist.Node) {
 }
 
 func (e *event) NotifyLeave(n *memberlist.Node) {
-	event := &Event{
-		Type: Leave,
+	event := &message.Event{
+		Type: message.ClusterLeave,
 		Name: n.Name,
 		Addr: n.Addr.String(),
 		Port: n.Port,
@@ -78,6 +56,8 @@ func (e *event) NotifyLeave(n *memberlist.Node) {
 	if err := e.s.notify(event); err != nil {
 		e.logger.Warn("notify failed", zap.String("type", "Leave"), zap.Any("event", event))
 	}
+
+	// 删除peer
 	if peer, ok := e.s.peers.Load(n.Name); ok {
 		_ = peer.(*Peer).Close()
 		e.s.peers.Delete(n.Name)

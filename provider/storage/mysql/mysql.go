@@ -47,7 +47,10 @@ func (m *MySQL) Init() error {
 }
 
 // Store ...
-func (m *MySQL) Store(msgs []*message.Message) error {
+func (m *MySQL) Store(msgs []*message.Message, msgIDs []string) error {
+	if len(msgs) != len(msgIDs) {
+		return fmt.Errorf("msgids长度和msgs长度不一致")
+	}
 	tx, err := m.DB.Begin()
 	if err != nil {
 		m.logger.Error("store failed", zap.Error(err))
@@ -62,12 +65,13 @@ func (m *MySQL) Store(msgs []*message.Message) error {
 	}
 	defer stmt.Close() // Prepared statements take up server resources and should be closed after use.
 
-	for _, msg := range msgs {
-		if _, err := stmt.Exec(msg.Topic, msg.ID, msg.Type, msg.Payload, time.Now().Unix()); err != nil {
+	for index, msg := range msgs {
+		if _, err := stmt.Exec(msg.Topic, msgIDs[index], msg.ID, msg.Type, msg.Payload, time.Now()); err != nil {
 			m.logger.Error("statement exec failed", zap.Error(err))
 			continue
 		}
 	}
+
 	if err := tx.Commit(); err != nil {
 		m.logger.Error("sql commit failed", zap.Error(err))
 		return err

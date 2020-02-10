@@ -139,40 +139,40 @@ func (c *Client) onReceive(msg mqtt.Message) error {
 			for _, msg := range msgs {
 				if msg.Type == message.MsgPub {
 					log.Print("获得的消息-->>>", msg, string(msg.Payload))
-				} else if msg.Type == message.NewMsg {
+				} else if msg.Type == message.MsgUnread {
 					unread := message.NewUnread()
 					if err := unread.Decode(msg.Payload); err != nil {
 						log.Println("unread decode failed", err)
 					}
-					for topic, isRead := range unread.Topics {
-						log.Println("主题", topic, "未读消息标志为", isRead)
-						newMsg := message.New()
-						newMsg.Topic = topic
-						newMsg.Type = message.MsgPull
-						newMsg.ID = time.Now().String()
-						newMsg.Payload = message.PackPullMsg(10, []byte("10060"))
-						body, err := message.Encode([]*message.Message{newMsg}, message.NoCompress)
-						if err != nil {
-							log.Print("msg encode faileld", err)
-							return err
-						}
-
-						mqttPub := &mqtt.Publish{
-							Header: &mqtt.StaticHeader{
-								QOS:    1,
-								Retain: false,
-								DUP:    false,
-							},
-							Topic:     []byte(topic),
-							Payload:   body,
-							MessageID: 1,
-						}
-
-						_, err = mqttPub.EncodeTo(c.socket)
-						if err != nil {
-							log.Println("publish failed", err)
-							return err
-						}
+					for topic, count := range unread.Topics {
+						log.Println("主题", topic, "未读消息条数为", count)
+						//newMsg := message.New()
+						//newMsg.Topic = topic
+						//newMsg.Type = message.MsgPull
+						//newMsg.ID = time.Now().String()
+						//newMsg.Payload = message.PackPullMsg(10, []byte("10060"))
+						//body, err := message.Encode([]*message.Message{newMsg}, message.NoCompress)
+						//if err != nil {
+						//	log.Print("msg encode faileld", err)
+						//	return err
+						//}
+						//
+						//mqttPub := &mqtt.Publish{
+						//	Header: &mqtt.StaticHeader{
+						//		QOS:    1,
+						//		Retain: false,
+						//		DUP:    false,
+						//	},
+						//	Topic:     []byte(topic),
+						//	Payload:   body,
+						//	MessageID: 1,
+						//}
+						//
+						//_, err = mqttPub.EncodeTo(c.socket)
+						//if err != nil {
+						//	log.Println("publish failed", err)
+						//	return err
+						//}
 
 					}
 

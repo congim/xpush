@@ -4,7 +4,7 @@ import "encoding/json"
 
 // Unread ...
 type Unread struct {
-	Topics map[string]bool `json:"topics"`
+	Topics map[string]int `json:"topics"`
 }
 
 // Encode encode
@@ -22,6 +22,6 @@ func (u *Unread) Decode(body []byte) error {
 // NewUnread ///
 func NewUnread() *Unread {
 	return &Unread{
-		Topics: make(map[string]bool),
+		Topics: make(map[string]int),
 	}
 }

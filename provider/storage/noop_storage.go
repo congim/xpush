@@ -19,7 +19,7 @@ func (n *noopStorage) Init() error {
 	return nil
 }
 
-func (n *noopStorage) Store([]*message.Message) error {
+func (n *noopStorage) Store([]*message.Message, []string) error {
 	return nil
 }
 

@@ -10,7 +10,7 @@ import (
 
 // Message msg
 type Message struct {
-	Type    int    `msgp:"t" json:"t"`   // 消息类型
+	Type    byte   `msgp:"t" json:"t"`   // 消息类型
 	Topic   string `msgp:"tp" json:"tp"` // 主题
 	ID      string `msgp:"i" json:"i"`   // 消息ID
 	Payload []byte `msgp:"p" json:"p"`   // 具体消息体

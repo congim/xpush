@@ -13,7 +13,13 @@ import (
 )
 
 func main() {
-	conf, err := config.New("config.yaml")
+	var conf *config.Config
+	var err error
+	if len(os.Args) >= 2 {
+		conf, err = config.New(os.Args[1])
+	} else {
+		conf, err = config.New("config.yaml")
+	}
 	if err != nil {
 		log.Println("new config failed, err msg is", err)
 		return

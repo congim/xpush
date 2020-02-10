@@ -9,17 +9,18 @@ import (
 
 type Storage interface {
 	Init() error
-	Store([]*message.Message) error
+	Store([]*message.Message, []string) error
 	Close() error
 	Get(string, []byte, int) ([]*message.Message, error)
 }
 
 func New(conf *config.Storage, logger *zap.Logger) Storage {
-	if conf.Name == "cassandra" {
-		//
-	} else if conf.Name == "fdb" {
-		//return foundationdb.New(conf.Fdb, logger)
-	} else if conf.Name == "mysql" {
+	//if conf.Name == "cassandra" {
+	//	//
+	//} else if conf.Name == "fdb" {
+	//	//return foundationdb.New(conf.Fdb, logger)
+	//} else
+	if conf.Name == "mysql" {
 		return mysql.New(conf.Mysql, logger)
 	}
 	return newNoopStorage(conf, logger)
