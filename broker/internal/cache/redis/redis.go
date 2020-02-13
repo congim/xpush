@@ -1,6 +1,8 @@
 package redis
 
 import (
+	"time"
+
 	"github.com/congim/xpush/config"
 	"github.com/go-redis/redis"
 	"go.uber.org/zap"
@@ -77,6 +79,15 @@ func (r *Redis) Incr(key string) error {
 	return nil
 }
 
+func (r *Redis) Set(key string, value int64, expiration int64) error {
+	statusCmd := r.client.Set(key, value, time.Duration(expiration))
+	if statusCmd.Err() != nil {
+		r.logger.Warn("cache set failed", zap.Error(statusCmd.Err()))
+		return statusCmd.Err()
+	}
+	return nil
+}
+
 // GetIncr  ..
 func (r *Redis) GetIncr(key string) (int, error) {
 	countInfo := r.client.Get(key)
@@ -85,6 +96,18 @@ func (r *Redis) GetIncr(key string) (int, error) {
 		return 0, nil
 	}
 	return count, nil
+}
+
+func (r *Redis) GetInt64(key string) (int64, error) {
+	valueInfo := r.client.Get(key)
+	value, err := valueInfo.Int64()
+	if err == redis.Nil {
+		return 0, nil
+	} else if err != nil {
+		r.logger.Warn("get int64 failed", zap.Error(err))
+		return 0, err
+	}
+	return value, nil
 }
 
 // New new reids

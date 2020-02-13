@@ -2,6 +2,7 @@ package broker
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"net"
 	"sync"
@@ -52,9 +53,9 @@ func newConn(conn net.Conn, broker *Broker, readTout uint16) *Conn {
 // Process processes the messages.
 func (c *Conn) Process() {
 	defer func() {
-		if err := recover(); err != nil {
-			logger.Warn("process", zap.Any("recover", err))
-		}
+		//if err := recover(); err != nil {
+		//	logger.Warn("process", zap.Any("recover", err))
+		//}
 	}()
 	stopC := make(chan struct{}, 1)
 	defer func() {
@@ -177,21 +178,19 @@ func (c *Conn) onReceive(msg mqtt.Message) error {
 		unread := message.NewUnread()
 		// 是否有未读消息
 		for _, topic := range topics {
-			total, err := c.broker.cache.GetIncr(topic + message.Topic_Msg_Count)
+			insertTime, err := c.broker.cache.GetInt64(topic + message.Topic_Msg_InsertTime)
+			if err != nil {
+				logger.Warn("get get insert time failed", zap.Error(err))
+				continue
+			}
+			ackTime, err := c.broker.cache.GetInt64(topic + "_" + c.username + message.User_Msg_AckTime)
 			if err != nil {
 				logger.Warn("get incr failed", zap.Error(err))
 				continue
 			}
-			recved, err := c.broker.cache.GetIncr(topic + "_" + c.username + message.User_Msg_Count)
-			if err != nil {
-				logger.Warn("get incr failed", zap.Error(err))
-				continue
+			if insertTime > ackTime {
+				unread.Topics[topic] = message.HASE_UNREAD_MSG
 			}
-			count := total - recved
-			if count <= 0 {
-				continue
-			}
-			unread.Topics[topic] = count
 		}
 		if err := c.Unread(unread); err != nil {
 			logger.Warn("notify unread msg failed", zap.Error(err))
@@ -254,9 +253,13 @@ func (c *Conn) onReceive(msg mqtt.Message) error {
 		packet := msg.(*mqtt.Puback)
 		msgIDinfo, ok := c.pubIDs.Load(packet.MessageID)
 		if ok {
+			// ack 时间更新
+			c.broker.cache.Set(msgIDinfo.(*msgIDInfo).topic+"_"+c.username+message.User_Msg_AckTime, time.Now().Unix(), 0)
 			c.storeMsgID(msgIDinfo.(*msgIDInfo).topic, msgIDinfo.(*msgIDInfo).msgID)
+			logger.Info("recv Ack", zap.Uint64("cid", c.cid), zap.String("userName", c.username), zap.String("topic", msgIDinfo.(*msgIDInfo).topic), zap.String("msgID", msgIDinfo.(*msgIDInfo).msgID))
 		}
 		c.pubIDs.Delete(packet.MessageID)
+
 		break
 
 	default:
@@ -308,7 +311,6 @@ func (c *Conn) onUnsubscribe(topic string) error {
 
 func (c *Conn) onPublish(packet *mqtt.Publish, msg *message.Message) error {
 	switch msg.Type {
-	// @TODO 消息推送处理
 	case message.MsgPub:
 		// @TODO 消息存储, 申请ID纪录转换
 		msgID, err := gBroker.msgID.MsgID()
@@ -317,49 +319,56 @@ func (c *Conn) onPublish(packet *mqtt.Publish, msg *message.Message) error {
 			return err
 		}
 
+		logger.Info("recv publish msg", zap.Uint64("cid", c.cid), zap.String("topic", string(packet.Topic)), zap.String("msgid", msgID), zap.String("originalID", msg.ID))
+
 		if err := c.broker.storage.Store([]*message.Message{msg}, []string{msgID}); err != nil {
 			logger.Warn("store msg failed", zap.Error(err))
 			return err
 		}
 
-		// @TODO 检测在线用并推送
+		// 检测在线用并推送
 		if err := c.broker.publish(c.cid, msgID, msg); err != nil {
 			logger.Warn("push online failed", zap.Error(err))
 		}
+		insertTime := time.Now().Unix()
+		// Topic 下插入时间更新
+		c.broker.cache.Set(msg.Topic+message.Topic_Msg_InsertTime, insertTime, 0)
 
-		// Topic下总消息条数递增
-		c.broker.cache.Incr(msg.Topic + message.Topic_Msg_Count)
-
-		// 用户已接收条数自增(由于是自己发送的消息，所以已接收标记成自己也接收)
-		c.broker.cache.Incr(msg.Topic + "_" + c.username + message.User_Msg_Count)
-
-		// @TODO 将消息推送到其他集群上
+		// 用户Ack时间更新
+		c.broker.cache.Set(msg.Topic+"_"+c.username+message.User_Msg_AckTime, insertTime, 0)
+		// 将消息推送到其他集群上
 		if _, err = c.broker.cluster.SyncMsg(msg); err != nil {
 			logger.Warn("cluster sysnc msg failed", zap.Error(err))
 		}
 
 		break
-	//	@TODO 消息拉取
+	// 消息拉取
 	case message.MsgPull:
-		//count, offset := message.UnPackPullMsg(msg.Payload)
-		//if count > message.MAX_MESSAGE_PULL_COUNT || count <= 0 {
-		//	return fmt.Errorf("the pull count %d is larger than :%d or equal/smaller than 0", count, message.MAX_MESSAGE_PULL_COUNT)
-		//}
-		//
-		//if _, ok := c.topics.Load(msg.Topic); !ok {
-		//	return errors.New("pull messages without subscribe the topic:" + msg.Topic)
-		//}
-		//log.Println(msg.Topic, "pull msg", count, offset)
-		//
-		//msgs, err := c.broker.storage.Get(msg.Topic, offset, count)
-		//if err != nil {
-		//	logger.Warn("load msg failed", zap.Uint64("cid", c.cid), zap.String("userName", c.username), zap.Error(err))
-		//	return err
-		//}
-		//log.Println("这里拉取信息打印", msgs, msg.Topic, string(offset), count)
-		//if len(msgs) > 0 {
-		//	c.msgQueue <- msgs
-		//}
+		ackTime := time.Now().Unix()
+		c.broker.cache.Set(msg.Topic+"_"+c.username+message.User_Msg_AckTime, ackTime, 0)
+
+		offset, checkTime, err := message.UnPackPullMsg(msg.Payload)
+		if err != nil {
+			return err
+		}
+		if offset < 0 || checkTime < 0 {
+			return fmt.Errorf("the pull offset %d checkTime %d equal/smaller than 0", offset, checkTime)
+		}
+
+		// 未订阅该主题
+		if _, ok := c.topics.Load(msg.Topic); !ok {
+			return errors.New("pull messages without subscribe the topic:" + msg.Topic)
+		}
+
+		msgs, err := c.broker.storage.Get(msg.Topic, offset, checkTime)
+		if err != nil {
+			logger.Warn("get msg failed", zap.Uint64("cid", c.cid), zap.String("userName", c.username), zap.Error(err))
+			return err
+		}
+
+		if len(msgs) > 0 {
+			c.sendQueue <- msgs
+		}
 		break
 	default:
 		return fmt.Errorf("unknow msg type, type is %d", msg.Type)

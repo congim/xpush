@@ -3,6 +3,7 @@ package message
 import (
 	"encoding/binary"
 	"encoding/json"
+	"fmt"
 
 	"github.com/congim/xpush/pkg/tool"
 	"github.com/golang/snappy"
@@ -33,9 +34,35 @@ func New() *Message {
 	return &Message{}
 }
 
+// Encode encode
+func Encode(msgs []*Message, isCompress byte) ([]byte, error) {
+	body, err := json.Marshal(msgs)
+	if err != nil {
+		return nil, err
+	}
+	var newBody []byte
+	var compress byte = 0
+	if isCompress == Compress {
+		body = snappy.Encode(nil, body)
+		compress, err = tool.SetBitValue(compress, 0, int(Compress))
+	} else {
+		compress, err = tool.SetBitValue(compress, 0, int(NoCompress))
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	newBody = make([]byte, len(body)+1)
+	newBody[0] = compress
+	copy(newBody[1:], body)
+	return newBody, nil
+}
+
 // Decode decode
 func Decode(body []byte) ([]*Message, error) {
 	isCompress, err := tool.GetBitValue(body[0], 0)
+
 	if err != nil {
 		return nil, err
 	}
@@ -58,40 +85,19 @@ func Decode(body []byte) ([]*Message, error) {
 	return msgs, nil
 }
 
-// Encode encode
-func Encode(msgs []*Message, isCompress byte) ([]byte, error) {
-	body, err := json.Marshal(msgs)
-	if err != nil {
-		return nil, err
-	}
-	var newBody []byte
-	var compress byte = 0
-	if isCompress == Compress {
-		body = snappy.Encode(nil, body)
-		compress, err = tool.SetBitValue(compress, 0, 1)
-	} else {
-		compress, err = tool.SetBitValue(compress, 0, 0)
-	}
-
-	if err != nil {
-		return nil, err
-	}
-
-	newBody = make([]byte, len(body)+1)
-	newBody[0] = compress
-	copy(newBody[1:], body)
-
-	return newBody, nil
-}
-
-func PackPullMsg(count int, msgID []byte) []byte {
-	msg := make([]byte, 1+len(msgID))
-	binary.PutUvarint(msg[0:1], uint64(count))
-	copy(msg[1:], msgID)
+func PackPullMsg(offset int, checkTime int64) []byte {
+	msg := make([]byte, 12)
+	binary.PutUvarint(msg[0:3], uint64(offset))
+	binary.PutUvarint(msg[3:11], uint64(checkTime))
+	//binary.PutUvarint(msg[3:11], uint64(checkTime))
 	return msg
 }
 
-func UnPackPullMsg(b []byte) (int, []byte) {
-	count, _ := binary.Uvarint(b[0:1])
-	return int(count), b[1:]
+func UnPackPullMsg(b []byte) (int, int64, error) {
+	if len(b) != 12 {
+		return 0, 0, fmt.Errorf("报文长度错误")
+	}
+	offset, _ := binary.Uvarint(b[0:3])
+	checkTime, _ := binary.Uvarint(b[3:11])
+	return int(offset), int64(checkTime), nil
 }

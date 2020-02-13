@@ -11,7 +11,7 @@ type Storage interface {
 	Init() error
 	Store([]*message.Message, []string) error
 	Close() error
-	Get(string, []byte, int) ([]*message.Message, error)
+	Get(string, int, int64) ([]*message.Message, error)
 }
 
 func New(conf *config.Storage, logger *zap.Logger) Storage {

@@ -214,10 +214,10 @@ func (b *Broker) publish(owner uint64, msgID string, msg *message.Message) error
 	conns.(*sync.Map).Range(func(cid, conn interface{}) bool {
 		if cid != owner {
 			if err := conn.(*Conn).Publish(msg); err != nil {
-				logger.Warn("push failed", zap.Uint64("cid", cid.(uint64)), zap.String("topic", msg.Topic), zap.Error(err))
+				logger.Warn("publish failed", zap.Uint64("cid", cid.(uint64)), zap.String("topic", msg.Topic), zap.Error(err))
 				return false
 			}
-			logger.Info("push msg", zap.Uint64("cid", cid.(uint64)), zap.String("topic", msg.Topic), zap.String("msgID", msgID), zap.String("originalID", msg.ID))
+			logger.Info("publish msg", zap.Uint64("cid", cid.(uint64)), zap.String("topic", msg.Topic), zap.String("msgID", msgID), zap.String("originalID", msg.ID))
 		}
 		return true
 	})

@@ -66,7 +66,7 @@ func (m *MySQL) Store(msgs []*message.Message, msgIDs []string) error {
 	defer stmt.Close() // Prepared statements take up server resources and should be closed after use.
 
 	for index, msg := range msgs {
-		if _, err := stmt.Exec(msg.Topic, msgIDs[index], msg.ID, msg.Type, msg.Payload, time.Now()); err != nil {
+		if _, err := stmt.Exec(msg.Topic, msgIDs[index], msg.ID, msg.Type, msg.Payload, time.Now().Unix()); err != nil {
 			m.logger.Error("statement exec failed", zap.Error(err))
 			continue
 		}
@@ -81,9 +81,48 @@ func (m *MySQL) Store(msgs []*message.Message, msgIDs []string) error {
 }
 
 // Get ...
-func (m *MySQL) Get(topic string, offset []byte, count int) ([]*message.Message, error) {
+func (m *MySQL) Get(topic string, offset int, checkTime int64) ([]*message.Message, error) {
+	//"SELECT id, original_id, type, payload, insert_time FROM msgs WHERE topic=? AND insert_time <=? ORDER BY insert_time DESC LIMIT ?,?;"
+	rows, err := m.DB.Query(SQLPullMsg, topic, checkTime, offset, 50)
+	if err != nil {
+		m.logger.Error("Query Context", zap.Error(err))
+		return nil, err
+	}
+	defer rows.Close()
+	msgs := make([]*message.Message, 0)
 
-	return nil, nil
+	for rows.Next() {
+		var id string
+		var insertTime string
+		msg := message.New()
+		msg.Topic = topic
+		if err := rows.Scan(&id, &msg.ID, &msg.Type, &msg.Payload, &insertTime); err != nil {
+			m.logger.Error("get msg failed", zap.String("sql", SQLPullMsg),
+				zap.String("topic", topic), zap.Int("offset", offset), zap.Int64("checkTime", checkTime),
+				zap.Error(err))
+			return nil, err
+		}
+		msgs = append(msgs, msg)
+	}
+	// If the database is being written to ensure to check for Close
+	// errors that may be returned from the driver. The query may
+	// encounter an auto-commit error and be forced to rollback changes.
+	rerr := rows.Close()
+	if rerr != nil {
+		m.logger.Error("rows close failed", zap.String("sql", SQLPullMsg),
+			zap.String("topic", topic), zap.Int("offset", offset), zap.Int64("checkTime", checkTime),
+			zap.Error(err))
+		return nil, err
+	}
+
+	// Rows.Err will report the last error encountered by Rows.Scan.
+	if err := rows.Err(); err != nil {
+		m.logger.Error("rows err failed", zap.String("sql", SQLPullMsg),
+			zap.String("topic", topic), zap.Int("offset", offset), zap.Int64("checkTime", checkTime),
+			zap.Error(err))
+		return nil, err
+	}
+	return msgs, nil
 }
 
 // Close stop sql

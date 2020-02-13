@@ -15,6 +15,13 @@ func (n *NoopCache) Incr(string) error {
 	return nil
 }
 
+func (n *NoopCache) Set(string, int64, int64) error {
+	return nil
+}
+
+func (n *NoopCache) GetInt64(string) (int64, error) {
+	return 0, nil
+}
 func (n *NoopCache) StoreMsgID(string, string, string) error {
 	return nil
 }

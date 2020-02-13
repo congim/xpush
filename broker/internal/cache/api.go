@@ -12,7 +12,9 @@ type Cache interface {
 	Unsubscribe(string, string) error
 	StoreMsgID(string, string, string) error
 	Incr(string) error
+	Set(string, int64, int64) error
 	GetIncr(string) (int, error)
+	GetInt64(string) (int64, error)
 }
 
 // New ...

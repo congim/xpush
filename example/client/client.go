@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net"
@@ -20,10 +21,23 @@ import (
 type Client struct {
 	socket   net.Conn
 	userName string
+	job      chan *Job
+}
+
+type Job struct {
+	Type    byte
+	Payload []byte
+}
+
+type Unread struct {
+	Topic string
+	//Count int
 }
 
 func NewClient() *Client {
-	return &Client{}
+	return &Client{
+		job: make(chan *Job, 100),
+	}
 }
 
 func (c *Client) Init(addr string) error {
@@ -103,6 +117,58 @@ func (c *Client) Subscribe(topics []string) error {
 	return nil
 }
 
+func (c *Client) jobThread(wg *sync.WaitGroup) {
+	defer func() {
+		wg.Done()
+	}()
+	for {
+		select {
+		case job, ok := <-c.job:
+			if ok {
+				switch job.Type {
+				case message.MsgPull:
+					unread := &Unread{}
+					json.Unmarshal(job.Payload, unread)
+					log.Println("解析未读", unread.Topic)
+					checkTime := time.Now().Unix()
+					for index := 0; index <= 10; index++ {
+						newMsg := message.New()
+						newMsg.Topic = unread.Topic
+						newMsg.Type = message.MsgPull
+						newMsg.ID = time.Now().String()
+						newMsg.Payload = message.PackPullMsg(index*50, checkTime)
+
+						body, err := message.Encode([]*message.Message{newMsg}, message.NoCompress)
+						if err != nil {
+							log.Print("msg encode faileld", err)
+							continue
+						}
+						mqttPub := &mqtt.Publish{
+							Header: &mqtt.StaticHeader{
+								QOS:    1,
+								Retain: false,
+								DUP:    false,
+							},
+							Topic:     []byte(unread.Topic),
+							Payload:   body,
+							MessageID: 1,
+						}
+
+						_, err = mqttPub.EncodeTo(c.socket)
+						if err != nil {
+							log.Println("publish failed", err)
+							continue
+						}
+					}
+
+					//	 ////////
+				}
+			}
+
+		}
+	}
+}
+
 // onReceive handles an MQTT receive.
 func (c *Client) onReceive(msg mqtt.Message) error {
 	switch msg.Type() {
@@ -138,42 +204,24 @@ func (c *Client) onReceive(msg mqtt.Message) error {
 		} else {
 			for _, msg := range msgs {
 				if msg.Type == message.MsgPub {
-					log.Print("获得的消息-->>>", msg, string(msg.Payload))
+					log.Print("获得的消息-->>>", msg.ID, " ", string(msg.Payload))
 				} else if msg.Type == message.MsgUnread {
 					unread := message.NewUnread()
 					if err := unread.Decode(msg.Payload); err != nil {
 						log.Println("unread decode failed", err)
 					}
-					for topic, count := range unread.Topics {
-						log.Println("主题", topic, "未读消息条数为", count)
-						//newMsg := message.New()
-						//newMsg.Topic = topic
-						//newMsg.Type = message.MsgPull
-						//newMsg.ID = time.Now().String()
-						//newMsg.Payload = message.PackPullMsg(10, []byte("10060"))
-						//body, err := message.Encode([]*message.Message{newMsg}, message.NoCompress)
-						//if err != nil {
-						//	log.Print("msg encode faileld", err)
-						//	return err
-						//}
-						//
-						//mqttPub := &mqtt.Publish{
-						//	Header: &mqtt.StaticHeader{
-						//		QOS:    1,
-						//		Retain: false,
-						//		DUP:    false,
-						//	},
-						//	Topic:     []byte(topic),
-						//	Payload:   body,
-						//	MessageID: 1,
-						//}
-						//
-						//_, err = mqttPub.EncodeTo(c.socket)
-						//if err != nil {
-						//	log.Println("publish failed", err)
-						//	return err
-						//}
-
+					for topic, hasMsg := range unread.Topics {
+						log.Println("主题", topic, "标记为", hasMsg)
+						b := &Unread{
+							Topic: topic,
+							//Count: count,
+						}
+						payload, _ := json.Marshal(b)
+						job := &Job{
+							Type:    message.MsgPull,
+							Payload: payload,
+						}
+						c.job <- job
 					}
 
 				}
@@ -242,7 +290,7 @@ func main() {
 	}
 
 	wg := &sync.WaitGroup{}
-	wg.Add(2)
+	wg.Add(1)
 	go client.loopRead(wg)
 
 	// 链接Conn
@@ -250,7 +298,7 @@ func main() {
 		log.Print("客户端订阅主题失败", err, os.Args[1])
 		return
 	}
-
+	wg.Add(1)
 	go client.ping(wg)
 
 	// 订阅
@@ -258,9 +306,11 @@ func main() {
 		log.Print("客户端订阅主题失败", err, os.Args[1])
 		return
 	}
+	wg.Add(1)
+	go client.jobThread(wg)
 
 	for {
-		time.Sleep(5 * time.Second)
+		time.Sleep(1 * time.Second)
 		if err := client.push(os.Args[3]); err != nil {
 			log.Println("客户端推送消息失败", err, os.Args[1])
 			return
